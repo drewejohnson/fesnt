@@ -22,7 +22,7 @@ class Manager(object):
     __slots__ = (
         'settings', 'filePath', 'xgrid', 'tgrid', 'nxCells', 'ntCells', 
         'nAngles', 'fluxCoeff', '__fluxGuess', 'eig', 'quadrature',
-        'calcType')
+        'calcType', 'universes', 'nGroups', 'materialMap')
 
     def __init__(self, filePath):
         self.filePath = filePath
@@ -32,7 +32,10 @@ class Manager(object):
         self.nxCells = None
         self.ntCells = None
         self.nAngles = None
+        self.nGroups = None
         self.fluxCoeff = None
+        self.universes = None
+        self.materialMap = None
         self.__fluxGuess = None
         self.eig = None
 
@@ -53,12 +56,28 @@ class Manager(object):
         timeArgs = self.settings['time']
         self.xgrid = buildGridVector(geomArgs['bounds'], geomArgs['divisions'])
         self.nxCells = self.xgrid.size
+        self.__makeMaterialMap()
         self.tgrid = buildGridVector(timeArgs['bounds'], timeArgs['divisions'])
         self.ntCells = self.tgrid.size
         self.nAngles = self.quadrature.shape[0]
         pointsPerCell = self.settings[FLUX_ORDER] + 1
         self.fluxCoeff = empty((self.ntCells, self.nAngles, 
                                 pointsPerCell * self.nxCells))
+
+    def __makeMaterialMap(self):
+        self.materialMap = empty(self.nxCells - 1, dtype=int)
+        universes = self.settings['geometry']['universes']
+        divisions = self.settings['geometry']['divisions']
+        scratch = []
+        prevIndx = 0
+        for indx, (univ, div) in enumerate(zip(universes, divisions)):
+            if univ not in scratch:
+               scratch.append(univ)
+            univIndx = scratch.index(univ)
+            offset = div + (0 if indx else 1)
+            self.materialMap[prevIndx:prevIndx + div] = univIndx
+            prevIndx += div
+        self.universes = tuple(scratch)
 
     def __initialize(self):
         calcType = self.calcType = self.settings.get('calc', 'fixed')
@@ -86,7 +105,7 @@ class Manager(object):
                 internalSource = None
             hasSource = internalSource is not None
         self.settings['source'] = internalSource
-        xbounds = self.settings['bounds'].pop('x')
+        xbounds = self.settings['boundaries'].pop('x')
         for indx in range(len(xbounds)):
             bc = xbounds[indx]
             if bc[:3] in BOUNDARY_TYPES:
@@ -100,7 +119,7 @@ class Manager(object):
             hasSource |= bc > 0
         if not hasSource:
             raise ValueError("No internal nor external source")
-        self.settings['bounds']['x'] = xbounds
+        self.settings['boundaries']['x'] = xbounds
 
 
 def scrapeInput(filePath):
