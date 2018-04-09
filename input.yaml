@@ -4,11 +4,13 @@ geometry:
     bounds: [0.383841, 0.5102028, 0.665]
     divisions: [10, 10, 10]
 fluxOrder: 2
-source: &source
-    mag: !!float 1E14 
-bounds:
-    x: [*source, vac]
+boundaries:
+    x: [1E14, vac]
 time:
     bounds: [1, 5, 10]
     divisions: [5, 5, 5]
 quadrature: 2
+calc: fixed
+initial:
+    flux: 0
+

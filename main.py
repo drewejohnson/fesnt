@@ -7,19 +7,34 @@ Copyright (2018) Andrew Johnson, GTC
 from numpy import array, empty, sum, diff, linspace
 from yaml import safe_load
 
+from quad import getQuadrature
 INPUT_FILE = './input.yaml'
 FLUX_ORDER = 'fluxOrder'
+QUAD = 'quadrature'
 DEFAULTS = {
-    FLUX_ORDER: 2  # second order polynomial
+    FLUX_ORDER: 2,
+    QUAD: 2
 }
-
+BOUNDARY_TYPES = {'vac': 0, 'ref': -1}
 
 class Manager(object):
+
+    __slots__ = (
+        'settings', 'filePath', 'xgrid', 'tgrid', 'nxCells', 'ntCells', 
+        'nAngles', 'fluxCoeff', '__fluxGuess', 'eig', 'quadrature',
+        'calcType')
 
     def __init__(self, filePath):
         self.filePath = filePath
         self.settings = scrapeInput(filePath)
-        self.__allocate()
+        self.xgrid = None
+        self.tgrid = None
+        self.nxCells = None
+        self.ntCells = None
+        self.nAngles = None
+        self.fluxCoeff = None
+        self.__fluxGuess = None
+        self.eig = None
 
     def __repr__(self):
         return "<Manager for input file {} at {}>".format(self.filePath, 
@@ -27,18 +42,66 @@ class Manager(object):
 
     def main(self):
         # do a lot of things
+        self.__allocate()
+        self.__initialize()
 
         return self
 
     def __allocate(self):
+        self.quadrature = getQuadrature(self.settings[QUAD])
         geomArgs = self.settings['geometry']
         timeArgs = self.settings['time']
         self.xgrid = buildGridVector(geomArgs['bounds'], geomArgs['divisions'])
         self.nxCells = self.xgrid.size
         self.tgrid = buildGridVector(timeArgs['bounds'], timeArgs['divisions'])
         self.ntCells = self.tgrid.size
-        self.pointsPerCell = self.settings[FLUX_ORDER] + 1
-        self.fluxCoeff = empty((self.ntCells, self.pointsPerCell * self.nxCells))
+        self.nAngles = self.quadrature.shape[0]
+        pointsPerCell = self.settings[FLUX_ORDER] + 1
+        self.fluxCoeff = empty((self.ntCells, self.nAngles, 
+                                pointsPerCell * self.nxCells))
+
+    def __initialize(self):
+        calcType = self.calcType = self.settings.get('calc', 'fixed')
+        if calcType not in {'fixed', 'eig'}:
+            raise ValueError("Calc type must be 'fixed' or 'eig', not {}"
+                             .format(calcType))
+        if calcType == 'fixed':
+            return self.__initFixedSource()
+        return self.__initEig()
+
+    def __initEig(self):
+        raise NotImplementedError
+
+    def __initFixedSource(self):
+        self.fluxCoeff[0, :, :] = self.settings['initial']['flux']
+        self.__verifySource()
+
+    def __verifySource(self):
+        hasSource = False
+        internalSource = self.settings.get('source', None)
+        if internalSource is not None:
+            internalSource = float(internalSource)
+            assert internalSource >= 0
+            if not internalSource: 
+                internalSource = None
+            hasSource = internalSource is not None
+        self.settings['source'] = internalSource
+        xbounds = self.settings['bounds'].pop('x')
+        for indx in range(len(xbounds)):
+            bc = xbounds[indx]
+            if bc[:3] in BOUNDARY_TYPES:
+                xbounds[indx] = BOUNDARY_TYPES[bc[:3]]
+                continue
+            bc = float(bc)
+            if bc < 0:  # vacuum
+                xbounds[indx] = BOUNDARY_TYPES['vac']
+                continue
+            xbounds[indx] = bc
+            hasSource |= bc > 0
+        if not hasSource:
+            raise ValueError("No internal nor external source")
+        self.settings['bounds']['x'] = xbounds
+
 
 def scrapeInput(filePath):
     """Scrape the input file."""
