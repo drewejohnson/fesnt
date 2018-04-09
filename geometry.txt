@@ -1,0 +1,27 @@
+/*
+1D fuel pin
+- fuel
+- clad
+- coolant
+
+*/
+
+include materials
+
+% -- Geometry
+surf 100 px 0.383841
+surf 110 px 0.5102028
+surf 199 rect 0.0 0.665 0.0 5.0
+
+cell 10 10 fuel  -100 -199
+cell 11 11 clad  100 -110 -199
+cell 12 12 water 110 -199
+cell 1  0 fill 10 -100 -199
+cell 2  0 fill 11 100 -110 -199
+cell 3  0 fill 12 110 -199
+cell 99 0 outside 199
+
+% -- run parameters
+set pop 10000 100 50
+set gcu 10 11 12
+%plot 3 500 500 

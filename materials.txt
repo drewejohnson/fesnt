@@ -1,0 +1,34 @@
+% --- Fuel (composition given in atomic densities):
+
+mat fuel  -10.045
+92234.09c   6.15169E+18
+92235.09c   6.89220E+20
+92236.09c   3.16265E+18
+92238.09c   2.17103E+22
+ 6012.09c   9.13357E+18
+ 7014.09c   1.04072E+19
+ 8016.09c   4.48178E+22
+
+% --- Zircalloy cladding:
+
+mat clad   -6.560
+40000.06c  -0.9791
+50000.06c  -0.0159
+26000.06c  -0.0050
+
+% --- Water (composition given in atomic densities):
+
+mat water  -0.7569   moder lwtr 1001
+ 1001.06c   5.06153E+22
+ 8016.06c   2.53076E+22
+ 5010.06c   2.75612E+18
+ 5011.06c   1.11890E+19
+
+% --- Thermal scattering data for light water:
+
+therm lwtr lwj3.11t
+
+
+set acelib "sss_endfb7u.xsdata"
+set nfylib "sss_endfb7.nfy"
+set bc 3
