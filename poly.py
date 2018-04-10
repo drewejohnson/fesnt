@@ -1,6 +1,7 @@
 """
 Polynomial methods
 
+TODO: Watch polynomial weights in cells - some can be 0(1E3)
 TODO:W: Cythonize
 
 """
