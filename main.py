@@ -8,6 +8,8 @@ from numpy import array, empty, sum, diff, linspace
 from yaml import safe_load
 
 from quad import getQuadrature
+from mesh import Mesh
+
 INPUT_FILE = './input.yaml'
 FLUX_ORDER = 'fluxOrder'
 QUAD = 'quadrature'
@@ -22,7 +24,7 @@ class Manager(object):
     __slots__ = (
         'settings', 'filePath', 'xgrid', 'tgrid', 'nxCells', 'ntCells', 
         'nAngles', 'fluxCoeff', '__fluxGuess', 'eig', 'quadrature',
-        'calcType', 'universes', 'nGroups', 'materialMap')
+        'calcType', 'universes', 'nGroups', 'meshes')
 
     def __init__(self, filePath):
         self.filePath = filePath
@@ -34,9 +36,8 @@ class Manager(object):
         self.nAngles = None
         self.nGroups = None
         self.fluxCoeff = None
-        self.universes = None
-        self.materialMap = None
         self.__fluxGuess = None
+        self.meshes = set()
         self.eig = None
 
     def __repr__(self):
@@ -47,7 +48,8 @@ class Manager(object):
         # do a lot of things
         self.__allocate()
         self.__initialize()
-
+        self.__makeMeshes()
+        self.__makeMarching()
         return self
 
     def __allocate(self):
@@ -56,7 +58,6 @@ class Manager(object):
         timeArgs = self.settings['time']
         self.xgrid = buildGridVector(geomArgs['bounds'], geomArgs['divisions'])
         self.nxCells = self.xgrid.size
-        self.__makeMaterialMap()
         self.tgrid = buildGridVector(timeArgs['bounds'], timeArgs['divisions'])
         self.ntCells = self.tgrid.size
         self.nAngles = self.quadrature.shape[0]
@@ -64,20 +65,6 @@ class Manager(object):
         self.fluxCoeff = empty((self.ntCells, self.nAngles, 
                                 pointsPerCell * self.nxCells))
 
-    def __makeMaterialMap(self):
-        self.materialMap = empty(self.nxCells - 1, dtype=int)
-        universes = self.settings['geometry']['universes']
-        divisions = self.settings['geometry']['divisions']
-        scratch = []
-        prevIndx = 0
-        for indx, (univ, div) in enumerate(zip(universes, divisions)):
-            if univ not in scratch:
-               scratch.append(univ)
-            univIndx = scratch.index(univ)
-            offset = div + (0 if indx else 1)
-            self.materialMap[prevIndx:prevIndx + div] = univIndx
-            prevIndx += div
-        self.universes = tuple(scratch)
 
     def __initialize(self):
         calcType = self.calcType = self.settings.get('calc', 'fixed')
@@ -120,6 +107,26 @@ class Manager(object):
         if not hasSource:
             raise ValueError("No internal nor external source")
         self.settings['boundaries']['x'] = xbounds
+
+    def __makeMeshes(self):
+        order = self.settings[FLUX_ORDER]
+        geom = self.settings['geometry']
+        nxCells = sum(geom['divisions'])
+        cells = empty(nxCells, dtype=object)
+        cellIndx = 0
+        zipped = zip(geom['bounds'], geom['divisions'], geom['universes'])
+        for indx, (bnd, div, xsMat) in enumerate(zipped):
+            lower = geom['bounds'][indx - 1] if indx else 0
+            corners = linspace(lower, bnd, div + 1)
+            for count in range(div):
+                mesh = Mesh(self, corners[count:count + 2], xsMat, 
+                            order)
+                cells[cellIndx] = mesh
+                cellIndx += 1
+        self.meshes = cells
+
+    def __makeMarching(self):
+        pass
 
 
 def scrapeInput(filePath):
