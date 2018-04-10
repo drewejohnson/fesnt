@@ -44,6 +44,14 @@ class Manager(object):
         return "<Manager for input file {} at {}>".format(self.filePath, 
                                                           hex(id(self)))
 
+    @property
+    def angles(self):
+        return self.quadrature[:, 0]
+
+    @property
+    def weights(self):
+        return self.quadrature[:, 1]
+
     def main(self):
         # do a lot of things
         self.__allocate()
@@ -126,7 +134,29 @@ class Manager(object):
         self.meshes = cells
 
     def __makeMarching(self):
-        pass
+        last = self.meshes.size - 1
+        for indx, cell in enumerate(self.meshes):
+            for mu in self.angles:
+                pos = mu > 0
+                if not indx:
+                    if pos:
+                        cell.upwindMeshes[mu] = None
+                        cell.downwindMeshes[mu] = self.meshes[1]
+                        continue
+                    cell.downwindMeshes[mu] = None
+                    cell.upwindMeshes[mu] = self.meshes[1]
+                    continue
+                if indx == last:
+                    if pos:
+                        cell.downwindMeshes[mu] = None
+                        cell.upwindMeshes[mu] = self.meshes[-2]
+                        continue
+                    cell.upwindMeshes[mu] = None
+                    cell.downwindMeshes[mu] = self.meshes[-2]
+                    continue
+                offset = (1 if pos else - 1) 
+                cell.upwindMeshes[mu] = self.meshes[indx - offset]
+                cell.downwindMeshes[mu] = self.meshes[indx + offset]
 
 
 def scrapeInput(filePath):

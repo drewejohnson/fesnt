@@ -29,3 +29,8 @@ class Mesh(object):
         self.coeffs = empty((timePoints, nFemPoints), dtype=float64)
         self.recent = empty((2, nFemPoints), dtype=float64)
 
+    def __repr__(self):
+        hxID = hex(id(self))
+        return "<mesh.Mesh object bounded by {} at {}>".format(self.corners, 
+                                                               hxID)
+
