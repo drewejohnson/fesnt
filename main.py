@@ -26,22 +26,18 @@ BOUNDARY_TYPES = {'vac': 0, 'ref': -1}
 class Manager(object):
 
     __slots__ = (
-        'settings', 'filePath', 'xgrid', 'tgrid', 'nxCells', 'ntCells', 
+        'settings', 'filePath', 'tgrid', 
         'nAngles', 'fluxCoeff', '__fluxGuess', 'eig', 'quadrature',
         'calcType', 'universes', 'nGroups', 'meshes')
 
     def __init__(self, filePath):
         self.filePath = filePath
         self.settings = scrapeInput(filePath)
-        self.xgrid = None
         self.tgrid = None
-        self.nxCells = None
-        self.ntCells = None
-        self.nAngles = None
         self.nGroups = None
         self.fluxCoeff = None
         self.__fluxGuess = None
-        self.meshes = set()
+        self.meshes = None 
         self.eig = None
 
     def __repr__(self):
@@ -56,23 +52,32 @@ class Manager(object):
     def weights(self):
         return self.quadrature[:, 1]
 
+    @property
+    def nxCells(self):
+        if self.meshes is None or not any(self.meshes):
+            raise AttributeError("X Cells not build yet")
+        return len(self.meshes)
+
+    @property
+    def ntCells(self):
+        if self.tgrid is None or not any(self.tgrid):
+            raise AttributeError("T grid not build yet")
+        return len(self.tgrid)
+
     def main(self):
         # do a lot of things
         self.__allocate()
         self.__initialize()
-        self.__makeMeshes()
         self.__makeMarching()
         return self
 
     def __allocate(self):
         self.quadrature = getQuadrature(self.settings[QUAD])
+        self.nAngles = self.quadrature.shape[0]
+        self.__makeMeshes()
         geomArgs = self.settings['geometry']
         timeArgs = self.settings['time']
-        self.xgrid = buildGridVector(geomArgs['bounds'], geomArgs['divisions'])
-        self.nxCells = self.xgrid.size
         self.tgrid = buildGridVector(timeArgs['bounds'], timeArgs['divisions'])
-        self.ntCells = self.tgrid.size
-        self.nAngles = self.quadrature.shape[0]
         pointsPerCell = self.settings[FLUX_ORDER] + 1
         self.fluxCoeff = empty((self.ntCells, self.nAngles, 
                                 pointsPerCell * self.nxCells))
@@ -207,18 +212,19 @@ def _checkTimeBlock(opts):
     opts['divisions'] = array(opts['divisions'], dtype=int)
     return opts
 
-def buildGridVector(bounds, divisions, start=0):
-    assert bounds.size == divisions.size
-    nPoints = sum(divisions)
-    grid = empty(nPoints + 1)
-    prevIndx = 0
-    for ii, (bound, div) in enumerate(zip(bounds, divisions)):
-        startAt = bounds[ii -1] if ii > 0 else start
-        subSlice = slice(0 if ii == 0 else 1, None)
-        points = linspace(startAt, bound, div + 1)[subSlice]
-        grid[prevIndx:prevIndx + len(points)] = points
-        prevIndx += div + (0 if ii else 1)
-    return grid
+# def buildGridVector(bounds, divisions, start=0):
+#     assert bounds.size == divisions.size
+#     nPoints = sum(divisions)
+#     grid = empty(nPoints + 1)
+#     prevIndx = 0
+#     for ii, (bound, div) in enumerate(zip(bounds, divisions)):
+#         startAt = bounds[ii -1] if ii > 0 else start
+#         subSlice = slice(0 if ii == 0 else 1, None)
+#         points = linspace(startAt, bound, div + 1)[subSlice]
+#         grid[prevIndx:prevIndx + len(points)] = points
+#         prevIndx += div + (0 if ii else 1)
+#     return grid
+
 if __name__ == "__main__":
     manager = Manager(INPUT_FILE).main()
 
