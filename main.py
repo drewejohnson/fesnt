@@ -2,6 +2,10 @@
 Main driver script for FeSnT
 
 Copyright (2018) Andrew Johnson, GTC
+
+TODO:W: Default number of divisions
+TODO:W: Allow a single entry to be entered as divisions and applied to all zones
+TODO:W: Criticality calculation
 """
 
 from numpy import array, empty, sum, diff, linspace
