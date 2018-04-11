@@ -26,7 +26,7 @@ BOUNDARY_TYPES = {'vac': 0, 'ref': -1}
 class Manager(object):
 
     __slots__ = (
-        'settings', 'filePath', 'tgrid', 
+        'settings', 'filePath', 'tgrid', 'muStarts',
         'nAngles', 'fluxCoeff', '__fluxGuess', 'eig', 'quadrature',
         'calcType', 'universes', 'nGroups', 'meshes')
 
@@ -39,6 +39,7 @@ class Manager(object):
         self.__fluxGuess = None
         self.meshes = None 
         self.eig = None
+        self.muStarts = {}
 
     def __repr__(self):
         return "<Manager for input file {} at {}>".format(self.filePath, 
@@ -142,6 +143,11 @@ class Manager(object):
                 cellIndx += 1
         self.meshes = cells
 
+    def __meshAsBoundary(self, mu, mesh):
+        if mu not in self.muStarts:
+            self.muStarts[mu] = set()
+        self.muStarts[mu].add(mesh)
+
     def __makeMarching(self):
         last = self.meshes.size - 1
         for indx, cell in enumerate(self.meshes):
@@ -151,6 +157,7 @@ class Manager(object):
                     if pos:
                         cell.upwindMeshes[mu] = None
                         cell.downwindMeshes[mu] = self.meshes[1]
+                        self.__meshAsBoundary(mu, cell) 
                         continue
                     cell.downwindMeshes[mu] = None
                     cell.upwindMeshes[mu] = self.meshes[1]
@@ -161,6 +168,7 @@ class Manager(object):
                         cell.upwindMeshes[mu] = self.meshes[-2]
                         continue
                     cell.upwindMeshes[mu] = None
+                    self.__meshAsBoundary(mu, cell) 
                     cell.downwindMeshes[mu] = self.meshes[-2]
                     continue
                 offset = (1 if pos else - 1) 
@@ -212,18 +220,18 @@ def _checkTimeBlock(opts):
     opts['divisions'] = array(opts['divisions'], dtype=int)
     return opts
 
-# def buildGridVector(bounds, divisions, start=0):
-#     assert bounds.size == divisions.size
-#     nPoints = sum(divisions)
-#     grid = empty(nPoints + 1)
-#     prevIndx = 0
-#     for ii, (bound, div) in enumerate(zip(bounds, divisions)):
-#         startAt = bounds[ii -1] if ii > 0 else start
-#         subSlice = slice(0 if ii == 0 else 1, None)
-#         points = linspace(startAt, bound, div + 1)[subSlice]
-#         grid[prevIndx:prevIndx + len(points)] = points
-#         prevIndx += div + (0 if ii else 1)
-#     return grid
+def buildGridVector(bounds, divisions, start=0):
+    assert bounds.size == divisions.size
+    nPoints = sum(divisions)
+    grid = empty(nPoints + 1)
+    prevIndx = 0
+    for ii, (bound, div) in enumerate(zip(bounds, divisions)):
+        startAt = bounds[ii -1] if ii > 0 else start
+        subSlice = slice(0 if ii == 0 else 1, None)
+        points = linspace(startAt, bound, div + 1)[subSlice]
+        grid[prevIndx:prevIndx + len(points)] = points
+        prevIndx += div + (0 if ii else 1)
+    return grid
 
 if __name__ == "__main__":
     manager = Manager(INPUT_FILE).main()
