@@ -17,4 +17,7 @@ quadrature: 2
 calc: fixed
 initial:
     flux: 0
-
+innerLim: 100
+innerEps: 1E-6
+outerLim: 50
+outerEps: 1E-6

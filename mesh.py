@@ -39,8 +39,12 @@ class Mesh(object):
         return ("<mesh.Mesh object bounded by {} at {}>".format(self.corners, 
                                                                hxID))
     
-
     def addBC(self, mu, value):
         indx = -1 if mu < 0 else 0
         self.__bc[indx] = value
+    
+    def setInitialValue(self, value):
+        """Apply a constant value across this element."""
+        value = float64(value)
+        self.coeffs[0, :] = value
 

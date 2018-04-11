@@ -1,8 +1,9 @@
 """
 Main driver script for FeSnT
 
-Copyright (2018) Andrew Johnson, GTC
-
+Copyright (2018) Andrew Johnson, GTRC
+TODO:   Plotting
+TODO:W: Status logging
 TODO:W: Default number of divisions
 TODO:W: Allow a single entry to be entered as divisions and applied to all zones
 TODO:W: Criticality calculation
@@ -13,14 +14,20 @@ from yaml import safe_load
 
 from quad import getQuadrature
 from mesh import Mesh
+from solver import Solver
 
 INPUT_FILE = './input.yaml'
 FLUX_ORDER = 'fluxOrder'
 QUAD = 'quadrature'
 DEFAULTS = {
     FLUX_ORDER: 2,
-    QUAD: 2
+    QUAD: 2,
 }
+EPSILONS = {'innerEps': 1E-8, 'outerEps': 1E-8}
+ITERATION_LIMITS = {'innerLim': 100, 'outerLim': 100}
+DEFAULTS.update(EPSILONS)
+DEFAULTS.update(ITERATION_LIMITS)
+
 BOUNDARY_TYPES = {'vac': 0, 'ref': -1}
 BOUNDARY_SOURCES = {}
 
@@ -64,7 +71,7 @@ def boundaryFactory(opts):
 class Manager(object):
 
     __slots__ = (
-        'settings', 'filePath', 'tgrid', 'muStarts',
+        'settings', 'filePath', 'tgrid', 'muStarts', 'solver',
         'nAngles', 'fluxCoeff', '__fluxGuess', 'eig', 'quadrature',
         'calcType', 'universes', 'nGroups', 'meshes')
 
@@ -73,8 +80,9 @@ class Manager(object):
         self.settings = scrapeInput(filePath)
         self.tgrid = None
         self.nGroups = None
-        self.fluxCoeff = None
+#        self.fluxCoeff = None
         self.__fluxGuess = None
+        self.solver = None
         self.meshes = None 
         self.eig = None
         self.muStarts = {}
@@ -110,12 +118,23 @@ class Manager(object):
             return self.settings['boundaries']['x']
         raise AttributeError("X boundaries not set")
 
-    def main(self):
-        # do a lot of things
+    def initialize(self):
         self.__allocate()
         self.__initialize()
         self.__makeMarching()
+        self.solver = Solver(self)
+        return self.solver
+
+    def main(self):
+        # do a lot of things
+        self.initialize()
+        self.solve()
         return self
+
+    def solve(self):
+        if self.solver is None:
+            raise AttributeError("Solver not ready. Run initialize first")
+        return self.solver.solve()
 
     def __allocate(self):
         self.quadrature = getQuadrature(self.settings[QUAD])
@@ -130,20 +149,26 @@ class Manager(object):
 
 
     def __initialize(self):
+        for mesh in self.meshes:
+            mesh.initialize(self.ntCells)
         calcType = self.calcType = self.settings.get('calc', 'fixed')
         if calcType not in {'fixed', 'eig'}:
             raise ValueError("Calc type must be 'fixed' or 'eig', not {}"
                              .format(calcType))
+        initialFlux = self.settings['initial']['flux']
+        # TODO:W: Way to set initial conditions per zone
         if calcType == 'fixed':
-            return self.__initFixedSource()
-        return self.__initEig()
+            self.__verifySource()
+            self.__initFixedSource(initialFlux)
+            return 
+        return self.__initEig(initialFlux)
 
-    def __initEig(self):
+    def __initEig(self, initialFlux):
         raise NotImplementedError
 
-    def __initFixedSource(self):
-        self.fluxCoeff[0, :, :] = self.settings['initial']['flux']
-        self.__verifySource()
+    def __initFixedSource(self, initialFlux):
+        for mesh in self.meshes:
+           mesh.setInitialValue(initialFlux)
 
     def __verifySource(self):
         hasSource = False
@@ -235,6 +260,9 @@ def scrapeInput(filePath):
     universes = scrape(options['xsfile'])
     options['geometry'] = _checkGeomBlock(options.pop('geometry'), universes)
     options['time'] = _checkTimeBlock(options.pop('time'))
+    options = _checkIterSettings(options, ITERATION_LIMITS, int)
+    options = _checkIterSettings(options, EPSILONS, float)
+
     if FLUX_ORDER not in options:
         options[FLUX_ORDER] = DEFAULTS[FLUX_ORDER]
     else:
@@ -244,6 +272,18 @@ def scrapeInput(filePath):
                              .format(fo))
         options[FLUX_ORDER] = fo
     return options
+
+def _checkIterSettings(opts, defaults, dtype):
+    for key, value in defaults.items():
+        if key not in opts:
+            opts[key] = value
+            continue
+        trial = opts[key]
+        if not isinstance(trial, dtype):
+            trial = dtype(trial)
+        assert trial > 0
+        opts[key] = trial
+    return opts
 
 def _checkGeomBlock(opts, uFromRes):
     assert len(opts['universes']) == len(opts['bounds']) == len(opts['divisions'])
