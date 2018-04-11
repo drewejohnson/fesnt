@@ -7,13 +7,13 @@ from numpy import empty
 class Solver(object):
 
     __slots__ = ('meshes', 'quad', 'starts', 'tgrid', 'nGroups', 'innerLim',
-                 'innerEps', 'outerEps', 'outerLim')
+                 'innerEps', 'outerEps', 'outerLim', 'nAngles')
 
     def __init__(self, manager):
         self.meshes = manager.meshes
-        self.quad = manager.quadrature
         self.starts = manager.muStarts
         self.tgrid = manager.tgrid
+        self.nAngles = manager.nAngles
         self.nGroups = manager.nGroups
         self.innerLim = manager.settings['innerLim']
         self.outerLim = manager.settings['outerLim']

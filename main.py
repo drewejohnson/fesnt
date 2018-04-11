@@ -72,7 +72,7 @@ class Manager(object):
 
     __slots__ = (
         'settings', 'filePath', 'tgrid', 'muStarts', 'solver',
-        'nAngles', 'fluxCoeff', '__fluxGuess', 'eig', 'quadrature',
+        'nAngles', 'fluxCoeff', '__fluxGuess', 'eig', 'weights', 'angles',
         'calcType', 'universes', 'nGroups', 'meshes')
 
     def __init__(self, filePath):
@@ -90,14 +90,6 @@ class Manager(object):
     def __repr__(self):
         return "<Manager for input file {} at {}>".format(self.filePath, 
                                                           hex(id(self)))
-
-    @property
-    def angles(self):
-        return self.quadrature[:, 0]
-
-    @property
-    def weights(self):
-        return self.quadrature[:, 1]
 
     @property
     def nxCells(self):
@@ -137,8 +129,10 @@ class Manager(object):
         return self.solver.solve()
 
     def __allocate(self):
-        self.quadrature = getQuadrature(self.settings[QUAD])
-        self.nAngles = self.quadrature.shape[0]
+        self.nAngles = self.settings[QUAD]
+        quadrature = getQuadrature(self.settings[QUAD])
+        self.weights = quadrature[:, 1].reshape(self.nAngles, 1)
+        self.angles = quadrature[:, 0].reshape(self.nAngles, 1)
         self.__makeMeshes()
         geomArgs = self.settings['geometry']
         timeArgs = self.settings['time']
@@ -227,7 +221,7 @@ class Manager(object):
     def __makeMarching(self):
         last = self.meshes.size - 1
         for indx, cell in enumerate(self.meshes):
-            for mu in self.angles:
+            for mu in self.angles[:, 0]:
                 pos = mu > 0
                 if not indx:
                     if pos:
