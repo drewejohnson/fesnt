@@ -22,6 +22,46 @@ DEFAULTS = {
     QUAD: 2
 }
 BOUNDARY_TYPES = {'vac': 0, 'ref': -1}
+BOUNDARY_SOURCES = {}
+
+
+class PulsedSource(object):
+        self.mag = float(kwargs['mag'])
+        self.mag = float(kwargs['mag'])
+    __slots__ = ('t0', 't1', 'mag')
+
+    def __init__(self, **kwargs):
+        if 't0' not in kwargs:
+            kwargs['t0'] = 0.0
+        self.t0 = float(kwargs['t0']) 
+        self.t1 = float(kwargs['t1'])
+        self.mag = float(kwargs['mag'])
+        try:
+            assert self.t0 < self.t1
+            assert self.mag >= 0 
+        except AssertionError:
+            raise TypeError("Could not properly construct pulsed source "
+                            "with the following options: {}".format(kwargs))
+
+    def __call__(self, t, mu):
+        if self.t0 <= t <= self.t1:
+            return self.mag
+        return 0
+
+BOUNDARY_SOURCES['pulse'] = PulsedSource 
+
+
+def boundaryFactory(opts):
+    if len(opts) > 1:
+        raise IndexError("Don't know to process multiple source types. "
+                         "Please only use one key, not {}"
+                         .format(', '.join(opts.keys())))
+    key, kwargs = opts.popitem()
+    if key not in BOUNDARY_SOURCES:
+        raise KeyError("{} not in boundary source options {}"
+                       .format(key, ', '.join(BOUNDARY_SOURCES.keys())))
+    return BOUNDARY_SOURCES[key](**kwargs)
+
 
 class Manager(object):
 
@@ -113,6 +153,10 @@ class Manager(object):
         xbounds = self.settings['boundaries'].pop('x')
         for indx in range(len(xbounds)):
             bc = xbounds[indx]
+            if isinstance(bc, dict):
+                xbounds[indx] = boundaryFactory(bc)
+                hasSource = True
+                continue
             if bc[:3] in BOUNDARY_TYPES:
                 xbounds[indx] = BOUNDARY_TYPES[bc[:3]]
                 continue
