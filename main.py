@@ -26,8 +26,6 @@ BOUNDARY_SOURCES = {}
 
 
 class PulsedSource(object):
-        self.mag = float(kwargs['mag'])
-        self.mag = float(kwargs['mag'])
     __slots__ = ('t0', 't1', 'mag')
 
     def __init__(self, **kwargs):
@@ -104,6 +102,13 @@ class Manager(object):
         if self.tgrid is None or not any(self.tgrid):
             raise AttributeError("T grid not build yet")
         return len(self.tgrid)
+
+    @property
+    def xbounds(self):
+        if ('boundaries' in self.settings and 
+                'x' in self.settings['boundaries']):
+            return self.settings['boundaries']['x']
+        raise AttributeError("X boundaries not set")
 
     def main(self):
         # do a lot of things
@@ -191,6 +196,8 @@ class Manager(object):
         if mu not in self.muStarts:
             self.muStarts[mu] = set()
         self.muStarts[mu].add(mesh)
+        bc = self.xbounds[0 if mu > 0 else 1]
+        mesh.addBC(mu, bc)
 
     def __makeMarching(self):
         last = self.meshes.size - 1
