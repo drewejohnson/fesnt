@@ -10,7 +10,7 @@ class Mesh(object):
     __slots__ = (
         'upwindMeshes', 'downwindMeshes', 'corners', 'material', 'femPoints',
         'coeffs', 'recent', 'polyOrder', 'points', 'polyWeights', 'manager', 
-        'nAngles')
+        'nAngles', '__bc')
 
     def __init__(self, manager, points, material, polyOrder):
         self.manager = manager
@@ -22,6 +22,7 @@ class Mesh(object):
         self.coeffs = None
         self.recent = None
         self.polyWeights = None
+        self.__bc = [None, None]
         self.nAngles = manager.nAngles
         self.femPoints = linspace(
             self.corners[0], self.corners[-1], polyOrder + 1)
@@ -38,3 +39,8 @@ class Mesh(object):
         return ("<mesh.Mesh object bounded by {} at {}>".format(self.corners, 
                                                                hxID))
     
+
+    def addBC(self, mu, value):
+        indx = -1 if mu < 0 else 0
+        self.__bc[indx] = value
+

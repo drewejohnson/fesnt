@@ -4,8 +4,12 @@ geometry:
     bounds: [0.383841, 0.5102028, 0.665]
     divisions: [10, 10, 10]
 fluxOrder: 2
+left-source: &left-source
+    t0: 0
+    t1: 1
+    mag: 1E14
 boundaries:
-    x: [1E14, vac]
+    x: [{pulse: *left-source}, vac]
 time:
     bounds: [1, 5, 10]
     divisions: [5, 5, 5]
