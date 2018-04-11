@@ -81,9 +81,9 @@ class XSContainer(object):
 
     @energies.setter
     def energies(self, value):
-        self.setEnergies(value)
+        self.__setEnergies(value)
     
-    def setEnergies(self, value):
+    def __setEnergies(self, value):
         if isinstance(value, ndarray):
             self.__energies = value
         elif isinstance(value, str):
@@ -124,7 +124,8 @@ def scrape(fileP, b1=False, scatterOrder=3):
                 continue
             if curEnergy is None and 'MACRO_E' == line[:7]:
                 value = REGEX.search(line).groups()[0]
-                curEnergy = curUniv.setEnergies(value)
+                curUniv.energies = value
+                curEnergy = curUniv.energies 
                 continue
             if not startStr.match(line):
                 continue

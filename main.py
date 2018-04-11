@@ -2,12 +2,18 @@
 Main driver script for FeSnT
 
 Copyright (2018) Andrew Johnson, GTC
+
+TODO:W: Default number of divisions
+TODO:W: Allow a single entry to be entered as divisions and applied to all zones
+TODO:W: Criticality calculation
 """
 
 from numpy import array, empty, sum, diff, linspace
 from yaml import safe_load
 
 from quad import getQuadrature
+from mesh import Mesh
+
 INPUT_FILE = './input.yaml'
 FLUX_ORDER = 'fluxOrder'
 QUAD = 'quadrature'
@@ -20,45 +26,63 @@ BOUNDARY_TYPES = {'vac': 0, 'ref': -1}
 class Manager(object):
 
     __slots__ = (
-        'settings', 'filePath', 'xgrid', 'tgrid', 'nxCells', 'ntCells', 
+        'settings', 'filePath', 'tgrid', 'muStarts',
         'nAngles', 'fluxCoeff', '__fluxGuess', 'eig', 'quadrature',
-        'calcType')
+        'calcType', 'universes', 'nGroups', 'meshes')
 
     def __init__(self, filePath):
         self.filePath = filePath
         self.settings = scrapeInput(filePath)
-        self.xgrid = None
         self.tgrid = None
-        self.nxCells = None
-        self.ntCells = None
-        self.nAngles = None
+        self.nGroups = None
         self.fluxCoeff = None
         self.__fluxGuess = None
+        self.meshes = None 
         self.eig = None
+        self.muStarts = {}
 
     def __repr__(self):
         return "<Manager for input file {} at {}>".format(self.filePath, 
                                                           hex(id(self)))
 
+    @property
+    def angles(self):
+        return self.quadrature[:, 0]
+
+    @property
+    def weights(self):
+        return self.quadrature[:, 1]
+
+    @property
+    def nxCells(self):
+        if self.meshes is None or not any(self.meshes):
+            raise AttributeError("X Cells not build yet")
+        return len(self.meshes)
+
+    @property
+    def ntCells(self):
+        if self.tgrid is None or not any(self.tgrid):
+            raise AttributeError("T grid not build yet")
+        return len(self.tgrid)
+
     def main(self):
         # do a lot of things
         self.__allocate()
         self.__initialize()
-
+        self.__makeMarching()
         return self
 
     def __allocate(self):
         self.quadrature = getQuadrature(self.settings[QUAD])
+        self.nAngles = self.quadrature.shape[0]
+        self.__makeMeshes()
         geomArgs = self.settings['geometry']
         timeArgs = self.settings['time']
-        self.xgrid = buildGridVector(geomArgs['bounds'], geomArgs['divisions'])
-        self.nxCells = self.xgrid.size
         self.tgrid = buildGridVector(timeArgs['bounds'], timeArgs['divisions'])
-        self.ntCells = self.tgrid.size
-        self.nAngles = self.quadrature.shape[0]
         pointsPerCell = self.settings[FLUX_ORDER] + 1
         self.fluxCoeff = empty((self.ntCells, self.nAngles, 
                                 pointsPerCell * self.nxCells))
+
 
     def __initialize(self):
         calcType = self.calcType = self.settings.get('calc', 'fixed')
@@ -86,7 +110,7 @@ class Manager(object):
                 internalSource = None
             hasSource = internalSource is not None
         self.settings['source'] = internalSource
-        xbounds = self.settings['bounds'].pop('x')
+        xbounds = self.settings['boundaries'].pop('x')
         for indx in range(len(xbounds)):
             bc = xbounds[indx]
             if bc[:3] in BOUNDARY_TYPES:
@@ -100,7 +124,56 @@ class Manager(object):
             hasSource |= bc > 0
         if not hasSource:
             raise ValueError("No internal nor external source")
-        self.settings['bounds']['x'] = xbounds
+        self.settings['boundaries']['x'] = xbounds
+
+    def __makeMeshes(self):
+        order = self.settings[FLUX_ORDER]
+        geom = self.settings['geometry']
+        nxCells = sum(geom['divisions'])
+        cells = empty(nxCells, dtype=object)
+        cellIndx = 0
+        zipped = zip(geom['bounds'], geom['divisions'], geom['universes'])
+        for indx, (bnd, div, xsMat) in enumerate(zipped):
+            lower = geom['bounds'][indx - 1] if indx else 0
+            corners = linspace(lower, bnd, div + 1)
+            for count in range(div):
+                mesh = Mesh(self, corners[count:count + 2], xsMat, 
+                            order)
+                cells[cellIndx] = mesh
+                cellIndx += 1
+        self.meshes = cells
+
+    def __meshAsBoundary(self, mu, mesh):
+        if mu not in self.muStarts:
+            self.muStarts[mu] = set()
+        self.muStarts[mu].add(mesh)
+
+    def __makeMarching(self):
+        last = self.meshes.size - 1
+        for indx, cell in enumerate(self.meshes):
+            for mu in self.angles:
+                pos = mu > 0
+                if not indx:
+                    if pos:
+                        cell.upwindMeshes[mu] = None
+                        cell.downwindMeshes[mu] = self.meshes[1]
+                        self.__meshAsBoundary(mu, cell) 
+                        continue
+                    cell.downwindMeshes[mu] = None
+                    cell.upwindMeshes[mu] = self.meshes[1]
+                    continue
+                if indx == last:
+                    if pos:
+                        cell.downwindMeshes[mu] = None
+                        cell.upwindMeshes[mu] = self.meshes[-2]
+                        continue
+                    cell.upwindMeshes[mu] = None
+                    self.__meshAsBoundary(mu, cell) 
+                    cell.downwindMeshes[mu] = self.meshes[-2]
+                    continue
+                offset = (1 if pos else - 1) 
+                cell.upwindMeshes[mu] = self.meshes[indx - offset]
+                cell.downwindMeshes[mu] = self.meshes[indx + offset]
 
 
 def scrapeInput(filePath):
@@ -159,6 +232,7 @@ def buildGridVector(bounds, divisions, start=0):
         grid[prevIndx:prevIndx + len(points)] = points
         prevIndx += div + (0 if ii else 1)
     return grid
+
 if __name__ == "__main__":
     manager = Manager(INPUT_FILE).main()
 
