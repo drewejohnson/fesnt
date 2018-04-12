@@ -161,10 +161,13 @@ class Mesh(object):
         if bc is not None and bc != 0:
             boundIndx = 0 if muPos else -1
             boundX = self.femPoints[boundIndx]
-            if bc > 0:
-                bcValue = bc
+            if isinstance(bc, (float, int)):
+                bc > 0:
+                    bcValue = bc
+                else:
+                    bcValue = self.recent[-1 - indexMu, boundIndx]
             else:
-                bcValue = self.recent[-1 - indexMu, boundIndx]
+                bcValue = bc(tn, mu)
         for ii in range(self.nUnknowns):
             if jmpValue:
                 source[ii] += jmpValue * (xUpw ** ii)
