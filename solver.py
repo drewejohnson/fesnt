@@ -29,6 +29,55 @@ class Solver(object):
 
     def solve(self):
         """Here we go."""
+        nSteps = self.tgrid.size
+        for timeLevel, tn in enumerate(self.tgrid):
+            print("INFO: Solving for time {}. Level {} of {}"
+                  .format(tn, timeLevel, nSteps))
+            self.__outerIteration(timeLevel, tn)
 
-    def __updateSource(self):
-        """Update the scatter and fission source for each mesh"""
+    def __outerIteration(self, timeLevel, tn):
+        """Outer iteration at the given time level"""
+        outerEps = self.outerEps
+        innerEps = self.innerEps
+        innerLim = self.innerLim
+        outerLim = self.outerLim
+        for outerI in range(self.outerLim):
+            maxSourceError = 0
+            print("DEBG: Outer iteration {} of {}".format(outerI, outerLim))
+            for mesh in self.meshes:
+               mesh.updateSourceOuter()
+
+            #
+            # inner iterations
+            #
+            maxFluxError = 0
+            for innerI in range(innerLim):
+                for indexM in range(self.nAngles):
+                    for mesh in self.meshes:
+                        mesh.solve(indexM, timeLevel, tn)
+
+                for mesh in self.meshes():
+                    fluxError = mesh.getFluxDifference()
+                    if fluxError is None:
+                        continue
+                    maxFluxError = max(maxFluxError, fluxError)
+                if maxFluxError <= innerEps:
+                    break
+            else:
+                print("WARN: Inner iterations did not converge after "
+                      "{} iterations. Max flux difference: {}"
+                      .format(innerLim, maxFluxError))
+
+           
+            for mesh in self.meshes():
+                sourceError= mesh.sourceDifference()
+                if sourceError is None:
+                    continue
+                maxSourceError = max(sourceError, maxSourceError)
+            if maxSourceError <= outerEps:
+                break
+        else:
+            print("WARN: Outer iteration did not converge "
+                  "after {} iterations. Max source difference: {}"
+                  .format(outerLim, maxSourceError))
+

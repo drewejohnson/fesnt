@@ -2,7 +2,7 @@
 Class for storing mesh values and mesh locations
 """
 from itertools import product
-from numpy import empty, linspace, float64, array
+from numpy import empty, linspace, float64, array, fabs
 from poly import buildLagrangeCoeffs
 
 SOURCE_FACTOR = float64(0.5)
@@ -92,6 +92,7 @@ class Mesh(object):
         value = float64(value)
         self.coeffs[0].fill(value)
         self.__scalarCoeffs = [(self.coeffs[0] * self.manager.weights).sum(axis=0)]
+        self.__source = []
 
     @property
     def nUnknowns(self):
@@ -103,13 +104,18 @@ class Mesh(object):
    
     def updateSourceOuter(self):
         """Create the internal source vector for each trial function."""
-        if self.__source is None:
-            self.__source = []
         scalar = self.scalarCoeffs
         nr, nc = self.nUnknowns, self.femPoints.size
         newSource = empty((nr, nc), dtype=float64)
         for ii, jj in product(range(nr), range(nc)):
             newSource[ii, jj] = self.femPoints[jj] ** ii * scalar[jj]
         self.__source.insert(0, newSource.sum(axis=1))
+        if len(self.__source) == 3:
+            self.__source.pop()
         return self.source
 
+    def sourceDifference(self):
+        """Return the difference between source vectors."""
+        if len(self.__source) == 1:
+            return
+        return fabs(self.__source[0] - self.__source[1]).max()
