@@ -1,4 +1,4 @@
-xsfile: ./fp_1D_2G_res.m
+xsfile: ./fp_1D_1G_res.m
 geometry:
     universes: [10, 11, 12]
     bounds: [0.383841, 0.5102028, 0.665]

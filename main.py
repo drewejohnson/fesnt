@@ -72,7 +72,7 @@ class Manager(object):
 
     __slots__ = (
         'settings', 'filePath', 'tgrid', 'muStarts', 'solver',
-        'nAngles', 'fluxCoeff', '__fluxGuess', 'eig', 'weights', 'angles',
+        'nAngles', '__fluxGuess', 'eig', 'weights', 'angles',
         'calcType', 'universes', 'nGroups', 'meshes')
 
     def __init__(self, filePath):
@@ -80,7 +80,6 @@ class Manager(object):
         self.settings = scrapeInput(filePath)
         self.tgrid = None
         self.nGroups = None
-#        self.fluxCoeff = None
         self.__fluxGuess = None
         self.solver = None
         self.meshes = None 
@@ -137,10 +136,6 @@ class Manager(object):
         geomArgs = self.settings['geometry']
         timeArgs = self.settings['time']
         self.tgrid = buildGridVector(timeArgs['bounds'], timeArgs['divisions'])
-        pointsPerCell = self.settings[FLUX_ORDER] + 1
-        self.fluxCoeff = empty((self.ntCells, self.nAngles, 
-                                pointsPerCell * self.nxCells))
-
 
     def __initialize(self):
         for mesh in self.meshes:

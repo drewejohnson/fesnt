@@ -29,3 +29,6 @@ class Solver(object):
 
     def solve(self):
         """Here we go."""
+
+    def __updateSource(self):
+        """Update the scatter and fission source for each mesh"""
