@@ -6,7 +6,7 @@ TODO:W: Cythonize
 
 """
 from itertools import product
-from numpy import empty, float64
+from numpy import empty, float64, array, ndarray
 from numpy.linalg import inv
 from numpy.polynomial.polynomial import polyval
 
@@ -30,6 +30,8 @@ def buildLagrangeCoeffs(points):
     TODO:W: Really any other implementation would suffice ¯\_(ツ)_/¯
     """
     nPnts = len(points)
+    if not isinstance(points, ndarray):
+        points = array(points, dtype=float64)
     vanMat = empty((nPnts, nPnts), dtype=float64)
     for ii, jj in product(range(nPnts), range(nPnts)):
         vanMat[ii, jj] = points[ii, 0] ** jj

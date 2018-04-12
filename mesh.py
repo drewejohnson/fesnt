@@ -2,17 +2,28 @@
 Class for storing mesh values and mesh locations
 """
 from itertools import product
-from numpy import empty, linspace, float64, array, fabs
+from numpy import empty, linspace, float64, array, fabs, zeros
 from poly import buildLagrangeCoeffs
 
 SOURCE_FACTOR = float64(0.5)
 
+NOT_RDY_MSG = "{} {} for mesh {}"
+
+
+class LIFOList(list):
+    """LIFO list that stores two items.
+        Meant to store attributes across two iterations
+    """
+    def prepend(self, value):
+        list.insert(self, 0, value)
+        if len(self) > 2:
+            self.pop()
 
 class Mesh(object):
 
     __slots__ = (
         'upwindMeshes', 'corners', 'material', 'femPoints',
-        'coeffs', 'recent', 'polyOrder', 'points', '__polyWeights', 'manager', 
+        'coeffs', '__recent', 'polyOrder', 'points', 'polyWeights', 'manager', 
         'nAngles', '__bc', '__scalarCoeffs', '__source', '__unknowns',
         'sourceXS')
 
@@ -26,8 +37,8 @@ class Mesh(object):
         self.polyOrder = polyOrder
         self.coeffs = None
         self.upwindMeshes = {}
-        self.recent = None
-        self.__polyWeights = None
+        self.__recent = None
+        self.polyWeights = None
         self.__bc = [None, None]
         self.__scalarCoeffs = None
         self.__source = None
@@ -36,45 +47,46 @@ class Mesh(object):
         self.femPoints = linspace(
             self.corners[0], self.corners[-1], polyOrder + 1)
 
+    
     @property
     def scalarCoeffs(self):
         """Coefficients for reconstructing the scalar flux."""
         if self.__scalarCoeffs is None:
-            raise AttributeError("Scalar coeffs not set")
+            raise AttributeError(NOT_RDY_MSG.format('Scalar coeffs',
+                                                    'not set', self))
         if not self.__scalarCoeffs:
-            raise AttributeError("Scalar coeffs are empty")
-        return self.__scalarCoeffs[0]
+            raise AttributeError(NOT_RDY_MSG.format("Scalar coeffs",
+                                                    'are empty', self))
+        return self.__scalarCoeffs[0].copy()
 
-    @scalarCoeffs.setter
-    def scalarCoeffs(self, value):
-        if self.__scalarCoeffs is None:
-            self.__scalarCoeffs = []
-        self.__scalarCoeffs.insert(0, value)
-        if len(self.__scalarCoeffs) > 2:
-            self.__scalarCoeffs.pop()
-
+    @property
+    def recent(self):
+        if self.__recent is None:
+            raise AttributeError(NOT_RDY_MSG.format('Recents',
+                                                    'not set', self))
+        if not self.__recent:
+            raise AttributeError(NOT_RDY_MSG.format("Recents",
+                                                    'are empty', self))
+        return self.__recent[0].copy()
     @property
     def source(self):
         """Most recent source vector for the inner solves."""
         if self.__source is None:
-            raise AttributeError("Source is not set")
+            raise AttributeError(NOT_RDY_MSG.format("Source",
+                                                    "not set", self))
         if not self.__source:
-            raise AttributeError("Source is empty")
-        return self.__source[0]        
+            raise AttributeError(NOT_RDY_MSG.format("Source",
+                                                    "empty", self))
+        return self.__source[0].copy()
 
     def initialize(self, timePoints):
         """Prep necessary arrays for calculation."""
         nFemPoints = self.femPoints.size
         self.coeffs = empty((timePoints, self.nAngles, nFemPoints), dtype=float64)
         points = [(p, 1) for p in self.femPoints]
-        self.recent = empty((2, nFemPoints), dtype=float64)
-
-    @property
-    def polyWeights(self):
-        """Polynomial weights required to reconstruct the mesh flux."""
-        if self.__polyWeights is None:
-            self.__polyWeights = buildLagrangeCoeffs(self.femPoints)
-        return self.__polyWeights
+        self.polyWeights = buildLagrangeCoeffs(points)
+        self.__recent = LIFOList()
+        self.__scalarCoeffs = LIFOList()
 
     def __repr__(self):
         hxID = hex(id(self))
@@ -90,8 +102,8 @@ class Mesh(object):
         """Apply a constant value across this element."""
         value = float64(value)
         self.coeffs[0].fill(value)
-        self.__scalarCoeffs = [(self.coeffs[0] * self.manager.weights).sum(axis=0)]
-        self.__source = []
+        self.__scalarCoeffs.prepend((self.coeffs[0] * self.manager.weights).sum(axis=0))
+        self.__source = LIFOList()
 
     @property
     def nUnknowns(self):
@@ -118,3 +130,47 @@ class Mesh(object):
         if len(self.__source) == 1:
             return
         return fabs(self.__source[0] - self.__source[1]).max()
+
+    def solve(self, indexMu, mu, muPos, timeLevel, tn):
+        """Solve the FEM for this mesh."""
+        source = self.__updateSource(mu, indexMu, muPos, tn)
+        upwM = self.upwindMeshes[mu]
+        nU = self.nUnknowns
+        if upwM is not None:
+            upwPntIndx = -1 if muPos else 0
+            xUpw = upwM.femPoints[upwPntIndx]
+            upwValue = upwM.recent[upwPntIndx]
+            for ii in range(nU):
+                source[ii] += upwValue * xUpw ** ii
+        coeffM = empty((self.nUnknowns, self.nUnknowns), dtype=float64)
+
+    def __updateSource(self, mu, indexMu, muPos, tn):
+        source = self.source
+        bc = self.__bc[0 if muPos else 1]
+        upwM = self.upwindMeshes[mu]
+        jmpValue = 0
+        bcValue = 0
+        if upwM is None or bc is None:
+            return source
+        if upwM is not None:
+            upwPntIndx = -1 if muPos else 0
+            xUpw = upwM.femPoints[upwPntIndx]
+            upwValue = upwM.recent[0, indexMu, upwPntIndx]
+            muAbs = fabs(mu) if muPos else mu
+            jmpValue = muAbs * upwValue
+        if bc is not None and bc != 0:
+            boundIndx = 0 if muPos else -1
+            boundX = self.femPoints[boundIndx]
+            if bc > 0:
+                bcValue = bc
+            else:
+                bcValue = self.recent[-1 - indexMu, boundIndx]
+        for ii in range(self.nUnknowns):
+            if jmpValue:
+                source[ii] += jmpValue * (xUpw ** ii)
+            if bcValue:
+                source[ii] += bcValue * (boundX ** ii)
+        return source
+
+    def getFluxDifference(self):
+        """Return the difference between fluxes between two iterations."""

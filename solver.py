@@ -7,13 +7,13 @@ from numpy import empty
 class Solver(object):
 
     __slots__ = ('meshes', 'quad', 'starts', 'tgrid', 'nGroups', 'innerLim',
-                 'innerEps', 'outerEps', 'outerLim', 'nAngles')
+                 'innerEps', 'outerEps', 'outerLim', 'angles')
 
     def __init__(self, manager):
         self.meshes = manager.meshes
         self.starts = manager.muStarts
         self.tgrid = manager.tgrid
-        self.nAngles = manager.nAngles
+        self.angles = manager.angles
         self.nGroups = manager.nGroups
         self.innerLim = manager.settings['innerLim']
         self.outerLim = manager.settings['outerLim']
@@ -52,11 +52,13 @@ class Solver(object):
             #
             maxFluxError = 0
             for innerI in range(innerLim):
-                for indexM in range(self.nAngles):
-                    for mesh in self.meshes:
-                        mesh.solve(indexM, timeLevel, tn)
+                for indexM, mu in enumerate(self.angles):
+                    muPos = mu > 0
+                    meshes = self.meshes if muPos else self.meshes[::-1]
+                    for mesh in meshes:
+                        mesh.solve(indexM, mu, muPos, timeLevel, tn)
 
-                for mesh in self.meshes():
+                for mesh in self.meshes:
                     fluxError = mesh.getFluxDifference()
                     if fluxError is None:
                         continue
