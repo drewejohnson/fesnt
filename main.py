@@ -221,24 +221,19 @@ class Manager(object):
                 if not indx:
                     if pos:
                         cell.upwindMeshes[mu] = None
-                        cell.downwindMeshes[mu] = self.meshes[1]
                         self.__meshAsBoundary(mu, cell) 
                         continue
-                    cell.downwindMeshes[mu] = None
                     cell.upwindMeshes[mu] = self.meshes[1]
                     continue
                 if indx == last:
                     if pos:
-                        cell.downwindMeshes[mu] = None
                         cell.upwindMeshes[mu] = self.meshes[-2]
                         continue
                     cell.upwindMeshes[mu] = None
                     self.__meshAsBoundary(mu, cell) 
-                    cell.downwindMeshes[mu] = self.meshes[-2]
                     continue
                 offset = (1 if pos else - 1) 
                 cell.upwindMeshes[mu] = self.meshes[indx - offset]
-                cell.downwindMeshes[mu] = self.meshes[indx + offset]
 
 
 def scrapeInput(filePath):

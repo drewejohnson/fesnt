@@ -11,7 +11,7 @@ SOURCE_FACTOR = float64(0.5)
 class Mesh(object):
 
     __slots__ = (
-        'upwindMeshes', 'downwindMeshes', 'corners', 'material', 'femPoints',
+        'upwindMeshes', 'corners', 'material', 'femPoints',
         'coeffs', 'recent', 'polyOrder', 'points', '__polyWeights', 'manager', 
         'nAngles', '__bc', '__scalarCoeffs', '__source', '__unknowns',
         'sourceXS')
@@ -24,9 +24,8 @@ class Mesh(object):
             xs['scatt0'] + xs['chit'] * xs['nubar'] * xs['fiss'])
         self.corners = points
         self.polyOrder = polyOrder
-        self.upwindMeshes = {}
-        self.downwindMeshes = {}
         self.coeffs = None
+        self.upwindMeshes = {}
         self.recent = None
         self.__polyWeights = None
         self.__bc = [None, None]
