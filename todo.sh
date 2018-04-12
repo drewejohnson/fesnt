@@ -5,9 +5,9 @@ function findtodo {
     grep -n "$1" *.py | tr -s " " | sed "s/: /:/g"
     return 0
 }
-findtodo "TODO: "
 echo "Crucial"
 echo "-------"
+findtodo "TODO: "
 
 echo "" 
 echo "Wishlist" 

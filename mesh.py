@@ -131,7 +131,7 @@ class Mesh(object):
             return
         return fabs(self.__source[0] - self.__source[1]).max()
 
-    def solve(self, indexMu, mu, muPos, timeLevel, tn):
+    def solve(self, indexMu, mu, muPos, timeLevel, tn, dt):
         """Solve the FEM for this mesh."""
         source = self.__updateSource(mu, indexMu, muPos, tn)
         upwM = self.upwindMeshes[mu]
@@ -143,8 +143,10 @@ class Mesh(object):
             for ii in range(nU):
                 source[ii] += upwValue * xUpw ** ii
         coeffM = empty((self.nUnknowns, self.nUnknowns), dtype=float64)
+        #TODO: Implement full matrix formulation
+        #TODO:W: Cython inner linear solve?
 
-    def __updateSource(self, mu, indexMu, muPos, tn):
+    def __updateSource(self, mu, indexMu, muPos, tn, dt):
         source = self.source
         bc = self.__bc[0 if muPos else 1]
         upwM = self.upwindMeshes[mu]
@@ -177,3 +179,4 @@ class Mesh(object):
 
     def getFluxDifference(self):
         """Return the difference between fluxes between two iterations."""
+        #TODO: Implement flux difference

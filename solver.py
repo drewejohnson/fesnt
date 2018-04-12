@@ -33,14 +33,16 @@ class Solver(object):
         for timeLevel, tn in enumerate(self.tgrid):
             print("INFO: Solving for time {}. Level {} of {}"
                   .format(tn, timeLevel, nSteps))
-            self.__outerIteration(timeLevel, tn)
+            dt = None if not tn else (self.tgrid[tn] - self.tgrid[tn - 1])
+            self.__outerIteration(timeLevel, tn, dt)
 
-    def __outerIteration(self, timeLevel, tn):
+    def __outerIteration(self, timeLevel, tn, dt):
         """Outer iteration at the given time level"""
         outerEps = self.outerEps
         innerEps = self.innerEps
         innerLim = self.innerLim
         outerLim = self.outerLim
+        dt = self.tgrid[tn] - self.tgrid[tn - 1]
         for outerI in range(self.outerLim):
             maxSourceError = 0
             print("DEBG: Outer iteration {} of {}".format(outerI, outerLim))
@@ -56,7 +58,7 @@ class Solver(object):
                     muPos = mu > 0
                     meshes = self.meshes if muPos else self.meshes[::-1]
                     for mesh in meshes:
-                        mesh.solve(indexM, mu, muPos, timeLevel, tn)
+                        mesh.solve(indexM, mu, muPos, timeLevel, tn, dt)
 
                 for mesh in self.meshes:
                     fluxError = mesh.getFluxDifference()
