@@ -6,7 +6,7 @@ from numpy import empty, linspace, float64, array, fabs, zeros
 from poly import buildLagrangeCoeffs
 
 SOURCE_FACTOR = float64(0.5)
-
+POLY_ORDER = 2
 NOT_RDY_MSG = "{} {} for mesh {}"
 
 
@@ -22,7 +22,7 @@ class LIFOList(list):
 class Mesh(object):
 
     __slots__ = (
-        'upwindMeshes', 'corners', 'material', 'femPoints',
+        'upwindMeshes', 'corners', 'material', 'femPoints', 'dx',
         'coeffs', '__recent', 'polyOrder', 'points', 'polyWeights', 'manager', 
         'nAngles', '__bc', '__scalarCoeffs', '__source', '__unknowns',
         'sourceXS')
@@ -31,10 +31,11 @@ class Mesh(object):
         self.manager = manager
         self.material = material
         xs = material.xs
+        self.corners = (points.min(), points.max())
+        self.dx = self.corners[1] - self.corners[0]
         self.sourceXS = SOURCE_FACTOR * (
-            xs['scatt0'] + xs['chit'] * xs['nubar'] * xs['fiss'])
-        self.corners = points
-        self.polyOrder = polyOrder
+            xs['scatt0'] + xs['chit'] * xs['nubar'] * xs['fiss']) * self.dx / 2
+        self.polyOrder = POLY_ORDER
         self.coeffs = None
         self.upwindMeshes = {}
         self.__recent = None
@@ -47,7 +48,6 @@ class Mesh(object):
         self.femPoints = linspace(
             self.corners[0], self.corners[-1], polyOrder + 1)
 
-    
     @property
     def scalarCoeffs(self):
         """Coefficients for reconstructing the scalar flux."""
@@ -68,6 +68,7 @@ class Mesh(object):
             raise AttributeError(NOT_RDY_MSG.format("Recents",
                                                     'are empty', self))
         return self.__recent[0].copy()
+
     @property
     def source(self):
         """Most recent source vector for the inner solves."""
@@ -117,12 +118,13 @@ class Mesh(object):
         """Create the internal source vector for each trial function."""
         scalar = self.scalarCoeffs
         nr, nc = self.nUnknowns, self.femPoints.size
-        newSource = empty((nr, nc), dtype=float64)
-        for ii, jj in product(range(nr), range(nc)):
-            newSource[ii, jj] = self.femPoints[jj] ** ii * scalar[jj]
-        self.__source.insert(0, newSource.sum(axis=1))
-        if len(self.__source) == 3:
-            self.__source.pop()
+        newSource = empty((nu, nu), dtype=float64)
+        newSource.fill(self.sourceXS)
+        for ii, jj in product(range(nu), range(nu)):
+            mult = (4 if jj == 1 else 1)  # multiplier for simpsons integration
+        #TODO: Update source vector for each iteration with integral coeffs from known fluxes from upwind, boundary conditions
+            newSource[ii, jj] = self.femPoints[jj] ** ii * scalar[jj] * mult
+        self.__source.prepend(newSource.sum(axis=1))
         return self.source
 
     def sourceDifference(self):
@@ -164,7 +166,7 @@ class Mesh(object):
             boundIndx = 0 if muPos else -1
             boundX = self.femPoints[boundIndx]
             if isinstance(bc, (float, int)):
-                bc > 0:
+                if bc > 0:
                     bcValue = bc
                 else:
                     bcValue = self.recent[-1 - indexMu, boundIndx]
