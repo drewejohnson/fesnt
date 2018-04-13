@@ -11,7 +11,6 @@ class Solver(object):
 
     def __init__(self, manager):
         self.meshes = manager.meshes
-        self.starts = manager.muStarts
         self.tgrid = manager.tgrid
         self.angles = manager.angles
         self.nGroups = manager.nGroups

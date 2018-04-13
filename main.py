@@ -69,7 +69,7 @@ def boundaryFactory(opts):
 class Manager(object):
 
     __slots__ = (
-        'settings', 'filePath', 'tgrid', 'muStarts', 'solver',
+        'settings', 'filePath', 'tgrid', 'solver',
         'nAngles', '__fluxGuess', 'eig', 'weights', 'angles',
         'calcType', 'universes', 'nGroups', 'meshes')
 
@@ -82,7 +82,6 @@ class Manager(object):
         self.solver = None
         self.meshes = None 
         self.eig = None
-        self.muStarts = {}
 
     def __repr__(self):
         return "<Manager for input file {} at {}>".format(self.filePath, 
@@ -202,11 +201,8 @@ class Manager(object):
                 cellIndx += 1
         self.meshes = cells
 
-    def __meshAsBoundary(self, mu, mesh):
-        if mu not in self.muStarts:
-            self.muStarts[mu] = set()
-        self.muStarts[mu].add(mesh)
-        bc = self.xbounds[0 if mu > 0 else 1]
+    def __meshAsBoundary(self, mu, mesh, pos):
+        bc = self.xbounds[0 if pos else 1]
         mesh.addBC(mu, bc)
 
     def __makeMarching(self):
@@ -217,7 +213,7 @@ class Manager(object):
                 if not indx:
                     if pos:
                         cell.upwindMeshes[mu] = None
-                        self.__meshAsBoundary(mu, cell) 
+                        self.__meshAsBoundary(mu, cell, pos) 
                         continue
                     cell.upwindMeshes[mu] = self.meshes[1]
                     continue
@@ -226,7 +222,7 @@ class Manager(object):
                         cell.upwindMeshes[mu] = self.meshes[-2]
                         continue
                     cell.upwindMeshes[mu] = None
-                    self.__meshAsBoundary(mu, cell) 
+                    self.__meshAsBoundary(mu, cell, pos) 
                     continue
                 offset = (1 if pos else - 1) 
                 cell.upwindMeshes[mu] = self.meshes[indx - offset]
