@@ -23,19 +23,18 @@ class Mesh(object):
 
     __slots__ = (
         'upwindMeshes', 'corners', 'material', 'femPoints', 'dx',
-        'coeffs', '__recent', 'polyOrder', 'points', 'polyWeights', 'manager', 
+        'coeffs', '__recent',  'points', 'polyWeights', 'manager', 
         'nAngles', '__bc', '__scalarCoeffs', '__source', '__unknowns',
         'sourceXS')
 
-    def __init__(self, manager, points, material, polyOrder):
+    def __init__(self, manager, points, material):
         self.manager = manager
         self.material = material
         xs = material.xs
         self.corners = (points.min(), points.max())
         self.dx = self.corners[1] - self.corners[0]
         self.sourceXS = SOURCE_FACTOR * (
-            xs['scatt0'] + xs['chit'] * xs['nubar'] * xs['fiss']) * self.dx / 2
-        self.polyOrder = POLY_ORDER
+            xs['scatt0'] + xs['chit'] * xs['nubar'] * xs['fiss']) * self.dx * 0.5
         self.coeffs = None
         self.upwindMeshes = {}
         self.__recent = None
@@ -43,10 +42,10 @@ class Mesh(object):
         self.__bc = [None, None]
         self.__scalarCoeffs = None
         self.__source = None
-        self.__unknowns = None
+        self.__unknowns = {}
         self.nAngles = manager.nAngles
         self.femPoints = linspace(
-            self.corners[0], self.corners[-1], polyOrder + 1)
+            self.corners[0], self.corners[-1], POLY_ORDER+ 1)
 
     @property
     def scalarCoeffs(self):
@@ -88,6 +87,7 @@ class Mesh(object):
         self.polyWeights = buildLagrangeCoeffs(points)
         self.__recent = LIFOList()
         self.__scalarCoeffs = LIFOList()
+        self.__unknowns = {mu: nFemPoints for mu in self.manager.angles[:, 0]}
 
     def __repr__(self):
         hxID = hex(id(self))
@@ -98,6 +98,7 @@ class Mesh(object):
         """Apply a boundary condition to this mesh for a given mu."""
         indx = -1 if mu < 0 else 0
         self.__bc[indx] = value
+        self.__unknowns[mu] = self.femPoints.size - 1
     
     def setInitialValue(self, value):
         """Apply a constant value across this element."""
@@ -105,14 +106,6 @@ class Mesh(object):
         self.coeffs[0].fill(value)
         self.__scalarCoeffs.prepend((self.coeffs[0] * self.manager.weights).sum(axis=0))
         self.__source = LIFOList()
-
-    @property
-    def nUnknowns(self):
-        """Number of unknowns required to solve for flux moments for each mu"""
-        if self.__unknowns is None:
-            self.__unknowns = (len(self.femPoints) 
-                               - (0 if self.__bc == [None, None] else 1))
-        return self.__unknowns
    
     def updateSourceOuter(self):
         """Create the internal source vector for each trial function."""
@@ -137,7 +130,7 @@ class Mesh(object):
         """Solve the FEM for this mesh."""
         source = self.__updateSource(mu, indexMu, muPos, tn)
         upwM = self.upwindMeshes[mu]
-        nU = self.nUnknowns
+        nU = self.nUnknowns[mu]
         if upwM is not None:
             upwPntIndx = -1 if muPos else 0
             xUpw = upwM.femPoints[upwPntIndx]

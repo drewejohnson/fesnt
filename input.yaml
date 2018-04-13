@@ -3,7 +3,6 @@ geometry:
     universes: [10, 11, 12]
     bounds: [0.383841, 0.5102028, 0.665]
     divisions: [10, 10, 10]
-fluxOrder: 2
 left-source: &left-source
     t0: 0
     t1: 1

@@ -17,10 +17,8 @@ from mesh import Mesh
 from solver import Solver
 
 INPUT_FILE = './input.yaml'
-FLUX_ORDER = 'fluxOrder'
 QUAD = 'quadrature'
 DEFAULTS = {
-    FLUX_ORDER: 2,
     QUAD: 2,
 }
 EPSILONS = {'innerEps': 1E-8, 'outerEps': 1E-8}
@@ -190,7 +188,6 @@ class Manager(object):
         self.settings['boundaries']['x'] = xbounds
 
     def __makeMeshes(self):
-        order = self.settings[FLUX_ORDER]
         geom = self.settings['geometry']
         nxCells = sum(geom['divisions'])
         cells = empty(nxCells, dtype=object)
@@ -200,8 +197,7 @@ class Manager(object):
             lower = geom['bounds'][indx - 1] if indx else 0
             corners = linspace(lower, bnd, div + 1)
             for count in range(div):
-                mesh = Mesh(self, corners[count:count + 2], xsMat, 
-                            order)
+                mesh = Mesh(self, corners[count:count + 2], xsMat)
                 cells[cellIndx] = mesh
                 cellIndx += 1
         self.meshes = cells
@@ -246,15 +242,6 @@ def scrapeInput(filePath):
     options['time'] = _checkTimeBlock(options.pop('time'))
     options = _checkIterSettings(options, ITERATION_LIMITS, int)
     options = _checkIterSettings(options, EPSILONS, float)
-
-    if FLUX_ORDER not in options:
-        options[FLUX_ORDER] = DEFAULTS[FLUX_ORDER]
-    else:
-        fo = int(options.pop(FLUX_ORDER))
-        if fo < 0:
-            raise ValueError("What does polynomial order {} even mean?"
-                             .format(fo))
-        options[FLUX_ORDER] = fo
     return options
 
 def _checkIterSettings(opts, defaults, dtype):
