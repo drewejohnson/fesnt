@@ -33,37 +33,14 @@ class Solver(object):
     def __outerIteration(self, timeLevel, tn, dt):
         """Outer iteration at the given time level"""
         outerEps = self.outerEps
-        innerEps = self.innerEps
-        innerLim = self.innerLim
         outerLim = self.outerLim
         for outerIndex in range(self.outerLim):
             maxSourceError = 0
             print("DEBG: Outer iteration {} of {}".format(outerIndex, outerLim))
             for mesh in self.meshes:
                mesh.updateSourceOuter(tn)
-
-            #
-            # inner iterations
-            #
-            maxFluxError = 0
-            for innerIndex in range(innerLim):
-                for indexMu, mu in enumerate(self.angles):
-                    muPos = mu > 0
-                    meshes = self.meshes if muPos else self.meshes[::-1]
-                    for mesh in meshes:
-                        mesh.solveInner(indexMu, mu, muPos, timeLevel, dt, innerIndex)
-
-                for mesh in self.meshes:
-                    fluxError = mesh.getFluxDifference(innerIndex)
-                    if fluxError is None:
-                        continue
-                    maxFluxError = max(maxFluxError, fluxError)
-                if maxFluxError <= innerEps:
-                    break
-            else:
-                print("WARN: Inner iterations did not converge after "
-                        "{} iterations. Max flux difference: {:7.5E}"
-                      .format(innerLim, maxFluxError))
+            
+            innerIndex = self.__innerIteration(timeLevel, tn, dt)
 
             for mesh in self.meshes:
                 mesh.finishInner(innerIndex)
@@ -72,6 +49,8 @@ class Solver(object):
                     continue
                 maxSourceError = max(sourceError, maxSourceError)
             if maxSourceError <= outerEps:
+                print("DEBG: Outer iteraiton converged after {} iterations. "
+                      "Max source error: {:7.5E}".format(outerIndex, maxSourceError))
                 break
         else:
             print("WARN: Outer iteration did not converge "
@@ -80,3 +59,28 @@ class Solver(object):
         for mesh in self.meshes:
             mesh.coeffs[timeLevel] = mesh.inner(innerIndex)
 
+    def __innerIteration(self, timeLevel, tn, dt):
+        innerEps = self.innerEps
+        innerLim = self.innerLim
+        maxFluxError = 0
+        for innerIndex in range(innerLim):
+            for indexMu, mu in enumerate(self.angles):
+                muPos = mu > 0
+                meshes = self.meshes if muPos else self.meshes[::-1]
+                for mesh in meshes:
+                    mesh.solveInner(indexMu, mu, muPos, timeLevel, dt, innerIndex)
+
+            for mesh in self.meshes:
+                fluxError = mesh.getFluxDifference(innerIndex)
+                if fluxError is None:
+                    continue
+                maxFluxError = max(maxFluxError, fluxError)
+            if maxFluxError <= innerEps:
+                print("DEBG: Inner iteraiton converged after {} iterations. "
+                      "Max flux error: {:7.5E}".format(innerIndex, maxFluxError))
+                break
+        else:
+            print("WARN: Inner iterations did not converge after "
+                    "{} iterations. Max flux difference: {:7.5E}"
+                  .format(innerLim, maxFluxError))
+        return innerIndex
