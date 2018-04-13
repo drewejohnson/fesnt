@@ -22,7 +22,10 @@ def buildLagrangeCoeffs(points):
     Returns
     -------
     numpy.array
-        Collection of weights ``a[j, m]``
+        Collection of weights ``a[j, m]``. Row ``j``  of the array are 
+        coefficients needed to build the Lagrange basis polynomial 
+        that is zero at all other points ``x_i,i != j`` and one
+        at ``x_j``
 
     TODO:W: Use alternative scheme, e.g. Barycentric
     TODO:W: https://epubs.siam.org/doi/pdf/10.1137/S0036144502417715
@@ -64,3 +67,4 @@ if __name__ == '__main__':
     pyplot.plot(evalPoints, full, label='full')
     pyplot.legend()
     pyplot.show()
+

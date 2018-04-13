@@ -2,13 +2,13 @@
 Class for storing mesh values and mesh locations
 """
 from itertools import product as iter_product
-from numpy import empty, linspace, float64, array, fabs, zeros, product, power
+from numpy import empty, linspace, float64, array, fabs, zeros, multiply, power
 from poly import buildLagrangeCoeffs
 
 SOURCE_FACTOR = float64(0.5)
 POLY_ORDER = 2
 NOT_RDY_MSG = "{} {} for mesh {}"
-SIMPSONS_COEFFS = array((0.5, 2, 0.5))
+SIMPSONS_COEFFS_HALVED = array((0.5, 2, 0.5))
 
 class LIFOList(list):
     """LIFO list that stores two items.
@@ -112,7 +112,7 @@ class Mesh(object):
         nu = self.femPoints.size
         newSource = empty((nu, nu), dtype=float64)
         newSource.fill(self.sourceXS)
-        for ii, jj in iter_product(range(nu), range(nu)):
+        for ii, jj in iter_product(range(nu), repeat=2)):
             mult = (4 if jj == 1 else 1)  # multiplier for simpsons integration
         #TODO: Update source vector for each iteration with integral coeffs from known fluxes from upwind, boundary conditions
             newSource[ii, jj] = self.femPoints[jj] ** ii * scalar[jj] * mult
@@ -136,9 +136,8 @@ class Mesh(object):
             upwValue = upwM.recent[upwPntIndx]
             for ii in range(nU):
                 source[ii] += upwValue * xUpw ** ii
-        coeffM = empty((nU, nU), dtype=float64)
+        coeffM = self.__buildAMatrix(nU, muPos) * mu
         #TODO: Implement full matrix formulation
-        #TODO:W: Cython inner linear solve?
 
     def __updateSourceInner(self, mu, indexMu, muPos, tn, dt, innerIndex):
         source = self.source
@@ -171,8 +170,8 @@ class Mesh(object):
             fromAMatrix = mu * (self.polyWeights[1:, boundIndx] * (1, 2) * 
                                 bcValue * self.dx * 0.5)
         if dt:
-            fromTMatrix = ((self.coeffs[tn - 1, mu, :] * self.dx) * SIMPSONS_COEFFS 
-                            / dt)
+            fromTMatrix = ((self.coeffs[tn - 1, mu, :] * self.dx) * 
+                           SIMPSONS_COEFFS_HALVED / dt)
         for ii in range(self.__unknowns[mu]):
             if jmpValue:
                 source[ii] += jmpValue * (xUpw ** ii)
@@ -183,6 +182,20 @@ class Mesh(object):
                 source[ii] += (fromTMatrix * power(self.femPoints, ii).sum())
         return source
 
+    def __buildAMatrix(self, nU, muPos):
+        """Build the inner iteration matrix for d\psi/dx."""
+        coeffM = empty((nU, nU), dtype=float64)
+        if nU != 3:
+            jVec = (1, 2) if muPos else (0, 1)
+        else:
+            jVec = range(nU)
+        for ii, jj in iter_product(range(nU), jVec):
+            temp = 0
+            for ll, alpha in enumerate(self.polyWeights[jj]):
+                temp += ll * alpha * xPoints[jj] ** (ll - 1 + ii)
+            coeffM[ii, jj] = temp * SIMPSONS_COEFFS_HALVED[jj]
+            
+        return coeffM * self.dx
 
     def getFluxDifference(self):
         """Return the difference between fluxes between two iterations."""
