@@ -4,7 +4,7 @@ Class for storing mesh values and mesh locations
 from itertools import product as iter_product
 from numpy import empty, linspace, float64, array, fabs, zeros, multiply, power
 from poly import buildLagrangeCoeffs
-
+from scipy.linalg import solve as linalg_solve
 SOURCE_FACTOR = float64(0.5)
 POLY_ORDER = 2
 NOT_RDY_MSG = "{} {} for mesh {}"
@@ -35,7 +35,7 @@ class Mesh(object):
         self.dx = self.corners[1] - self.corners[0]
         sourceXS = SOURCE_FACTOR * (
             xs['scatt0'] + xs['chit'] * xs['nubar'] * xs['fiss']) * self.dx * 0.5
-        self.__sigT = xs['total'][0]
+        self.__sigT = xs['tot'][0]
         self.sourceXS = sourceXS[0]
         self.coeffs = None
         self.upwindMeshes = {}
@@ -112,7 +112,7 @@ class Mesh(object):
         nu = self.femPoints.size
         newSource = empty((nu, nu), dtype=float64)
         newSource.fill(self.sourceXS)
-        for ii, jj in iter_product(range(nu), repeat=2)):
+        for ii, jj in iter_product(range(nu), repeat=2):
             mult = (4 if jj == 1 else 1)  # multiplier for simpsons integration
         #TODO: Update source vector for each iteration with integral coeffs from known fluxes from upwind, boundary conditions
             newSource[ii, jj] = self.femPoints[jj] ** ii * scalar[jj] * mult
@@ -130,14 +130,34 @@ class Mesh(object):
         source = self.__updateSourceInner(mu, indexMu, muPos, tn, dt, innerIndex)
         upwM = self.upwindMeshes[mu]
         nU = self.nUnknowns[mu]
+        upwJump = None
+        thisJump = None 
+        if nU != len(self.femPoints):
+            jVec = (1, 2) if muPos else (0, 1)
+        else:
+            jVec = tuple(range(nU))
+        coeffM = self.__buildAMatrix(nU, jVec) * mu
         if upwM is not None:
-            upwPntIndx = -1 if muPos else 0
+            #TODO:W: Share this code with __updateSourceInner
+            upwPntIndx = 2 if muPos else 0
+            thisPntIndx = 0 if muPos else 2 
             xUpw = upwM.femPoints[upwPntIndx]
-            upwValue = upwM.recent[upwPntIndx]
-            for ii in range(nU):
-                source[ii] += upwValue * xUpw ** ii
-        coeffM = self.__buildAMatrix(nU, muPos) * mu
-        #TODO: Implement full matrix formulation
+            upwValue = upwM.inner(innerIndex)[mu, upwPntIndx]
+            thisValue = self.__inner[inerIndex, mu ,thisPntIndx]
+        tMatrixLead = self.__sigT + (1 / dt if dt else 0)
+        for ii in range(nU):
+            if upwJump:
+                source[ii] += upwValue * (xUpw ** ii)
+                # b matrix - jumpy terms
+            if thisJump:
+                coeffM[ii, thisPntIndx] += thisValue * (xUpw * ii)  
+            for jj in jVec:
+                coeffM[ii, jj] += (tMatrixLead * SIMPSONS_COEFFS_HALVED[jj] 
+                                   * (self.femPoints[jj] ** ii))
+        # the actual solve
+        soln = linalg_solve(coeffM, source)
+        self.__inner[innerIndex, indexMu] = soln
+        return soln
 
     def __updateSourceInner(self, mu, indexMu, muPos, tn, dt, innerIndex):
         source = self.source
@@ -179,20 +199,16 @@ class Mesh(object):
                 intSum = (fromAMatrix* power(boundX, (ii, ii +1))).sum()
                 source[ii] -= bcValue * intSum
             if fromTMatrix is not None:
-                source[ii] += (fromTMatrix * power(self.femPoints, ii).sum())
+                source[ii] += (fromTMatrix * power(self.femPoints, ii)).sum()
         return source
 
-    def __buildAMatrix(self, nU, muPos):
+    def __buildAMatrix(self, nU, jVec):
         """Build the inner iteration matrix for d\psi/dx."""
         coeffM = empty((nU, nU), dtype=float64)
-        if nU != 3:
-            jVec = (1, 2) if muPos else (0, 1)
-        else:
-            jVec = range(nU)
-        for ii, jj in iter_product(range(nU), jVec):
+        for ii, jj in iter_product(range(nU), repeat=2):
             temp = 0
             for ll, alpha in enumerate(self.polyWeights[jj]):
-                temp += ll * alpha * xPoints[jj] ** (ll - 1 + ii)
+                temp += ll * alpha * xPoints[jVec[jj]] ** (ll - 1 + ii)
             coeffM[ii, jj] = temp * SIMPSONS_COEFFS_HALVED[jj]
             
         return coeffM * self.dx

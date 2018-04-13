@@ -135,8 +135,9 @@ class Manager(object):
         self.tgrid = buildGridVector(timeArgs['bounds'], timeArgs['divisions'])
 
     def __initialize(self):
+        innerLim = self.settings['innerLim']
         for mesh in self.meshes:
-            mesh.initialize(self.ntCells)
+            mesh.initialize(self.ntCells, innerLim)
         calcType = self.calcType = self.settings.get('calc', 'fixed')
         if calcType not in {'fixed', 'eig'}:
             raise ValueError("Calc type must be 'fixed' or 'eig', not {}"
