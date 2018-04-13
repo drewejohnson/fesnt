@@ -11,6 +11,10 @@ POLY_ORDER = 2
 NOT_RDY_MSG = "{} {} for mesh {}"
 SIMPSONS_COEFFS_HALVED = array((0.5, 2, 0.5))
 
+#
+# imports for debugging
+#
+from numpy import isnan
 class LIFOList(list):
     """LIFO list that stores two items.
         Meant to store attributes across two iterations
@@ -154,9 +158,9 @@ class Mesh(object):
                 # b matrix - jump terms
             if thisJump:
                 coeffM[ii, thisPntIndex] += thisValue * (xUpw * ii)  
-            for jj in jVec:
-                coeffM[ii, jj] += (tMatrixLead * SIMPSONS_COEFFS_HALVED[jj] 
-                                   * (self.femPoints[jj] ** ii))
+            for jj, femPnt in enumerate(jVec):
+                coeffM[ii, jj] += (tMatrixLead * SIMPSONS_COEFFS_HALVED[femPnt] 
+                                   * (self.femPoints[femPnt] ** ii))
         # the actual solve
         soln = linalg_solve(coeffM, source)
         self.__inner[innerIndex, indexMu, jVec] = soln
@@ -211,7 +215,7 @@ class Mesh(object):
         for ii, jj in iter_product(range(nU), repeat=2):
             temp = 0
             for ll, alpha in enumerate(self.polyWeights[jj]):
-                temp += ll * alpha * self.femPoints[jVec[jj]] ** (ll - 1 + ii)
+                temp += ll * alpha * self.femPoints[jVec[jj]] ** (ll + ii)
             coeffM[ii, jj] = temp * SIMPSONS_COEFFS_HALVED[jj]
             
         return coeffM * self.dx
