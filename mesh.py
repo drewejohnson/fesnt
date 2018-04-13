@@ -23,7 +23,7 @@ class Mesh(object):
 
     __slots__ = (
         'upwindMeshes', 'corners', 'material', 'femPoints', 'dx',
-        'coeffs', '__recent',  'points', 'polyWeights', 'manager', 
+        'coeffs', '__inner',  'points', 'polyWeights', 'manager', 
         'nAngles', '__bc', '__scalarCoeffs', '__source', '__unknowns',
         'sourceXS', '__sigT')
 
@@ -39,7 +39,7 @@ class Mesh(object):
         self.sourceXS = sourceXS[0]
         self.coeffs = None
         self.upwindMeshes = {}
-        self.__recent = None
+        self.__inner = None
         self.polyWeights = None
         self.__bc = [None, None]
         self.__scalarCoeffs = None
@@ -61,16 +61,6 @@ class Mesh(object):
         return self.__scalarCoeffs[0].copy()
 
     @property
-    def recent(self):
-        if self.__recent is None:
-            raise AttributeError(NOT_RDY_MSG.format('Recents',
-                                                    'not set', self))
-        if not self.__recent:
-            raise AttributeError(NOT_RDY_MSG.format("Recents",
-                                                    'are empty', self))
-        return self.__recent[0].copy()
-
-    @property
     def source(self):
         """Most recent source vector for the inner solves."""
         if self.__source is None:
@@ -81,13 +71,20 @@ class Mesh(object):
                                                     "empty", self))
         return self.__source[0].copy()
 
-    def initialize(self, timePoints):
+    def inner(self, innerIndex):
+        if self.__inner is None:
+            raise AttributeError(NOT_RDY_MSG.format("Inner", "not set",
+                                                    self))
+        return self.__inner[innerIndex].copy()
+
+    def initialize(self, timePoints, innerIterations):
         """Prep necessary arrays for calculation."""
         nFemPoints = self.femPoints.size
         self.coeffs = empty((timePoints, self.nAngles, nFemPoints), dtype=float64)
         points = [(p, 1) for p in self.femPoints]
         self.polyWeights = buildLagrangeCoeffs(points)
-        self.__recent = LIFOList()
+        self.__inner = empty((innerIterations, self.nAngles, nFemPoints), 
+                             dtype=float64)
         self.__scalarCoeffs = LIFOList()
         self.__unknowns = {mu: nFemPoints for mu in self.manager.angles[:, 0]}
 
@@ -120,7 +117,6 @@ class Mesh(object):
         #TODO: Update source vector for each iteration with integral coeffs from known fluxes from upwind, boundary conditions
             newSource[ii, jj] = self.femPoints[jj] ** ii * scalar[jj] * mult
         self.__source.prepend(newSource.sum(axis=1))
-        self.__recents.prepend(self.coefs[tn - 1])
         return self.source
 
     def sourceDifference(self):
@@ -129,9 +125,9 @@ class Mesh(object):
             return
         return fabs(self.__source[0] - self.__source[1]).max()
 
-    def solve(self, indexMu, mu, muPos, timeLevel, tn, dt):
-        """Solve the FEM for this mesh."""
-        source = self.__updateSource(mu, indexMu, muPos, tn, dt)
+    def solveInner(self, indexMu, mu, muPos, timeLevel, tn, dt, innerIndex):
+        """Solve the FEM for this mesh at the given time level and inner iteration."""
+        source = self.__updateSourceInner(mu, indexMu, muPos, tn, dt, innerIndex)
         upwM = self.upwindMeshes[mu]
         nU = self.nUnknowns[mu]
         if upwM is not None:
@@ -144,7 +140,7 @@ class Mesh(object):
         #TODO: Implement full matrix formulation
         #TODO:W: Cython inner linear solve?
 
-    def __updateSource(self, mu, indexMu, muPos, tn, dt):
+    def __updateSourceInner(self, mu, indexMu, muPos, tn, dt, innerIndex):
         source = self.source
         bc = self.__bc[0 if muPos else -1]
         upwM = self.upwindMeshes[mu]
@@ -155,7 +151,7 @@ class Mesh(object):
         if upwM is not None:
             upwPntIndx = -1 if muPos else 0
             xUpw = upwM.femPoints[upwPntIndx]
-            upwValue = upwM.recent[0, indexMu, upwPntIndx]
+            upwValue = upwM.inner(innerIndex)[indexMu, upwPntIndx]
             jmpValue = muAbs * upwValue
         if bc is not None and bc != 0:
             boundIndx = 0 if muPos else -1
@@ -167,7 +163,7 @@ class Mesh(object):
                     bcValue = self.recent[-1 - indexMu, boundIndx]
             else:
                 bcValue = bc(tn, mu)
-        self.__recent[0][indexMu, boundIndx] = bcValue
+        self.__inner[innerIndex, indexMu, boundIndx] = bcValue
         if bcValue:
             #
             # add simpson's integration terms

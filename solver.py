@@ -50,7 +50,7 @@ class Solver(object):
                     muPos = mu > 0
                     meshes = self.meshes if muPos else self.meshes[::-1]
                     for mesh in meshes:
-                        mesh.solve(indexM, mu, muPos, timeLevel, tn, dt)
+                        mesh.solveInner(indexM, mu, muPos, timeLevel, tn, dt, innerI)
 
                 for mesh in self.meshes:
                     fluxError = mesh.getFluxDifference()
@@ -64,7 +64,6 @@ class Solver(object):
                       "{} iterations. Max flux difference: {}"
                       .format(innerLim, maxFluxError))
 
-           
             for mesh in self.meshes():
                 sourceError= mesh.sourceDifference()
                 if sourceError is None:
