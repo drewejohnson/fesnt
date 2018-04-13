@@ -12,7 +12,7 @@ class Solver(object):
     def __init__(self, manager):
         self.meshes = manager.meshes
         self.tgrid = manager.tgrid
-        self.angles = manager.angles
+        self.angles = manager.angles[:, 0]
         self.nGroups = manager.nGroups
         self.innerLim = manager.settings['innerLim']
         self.outerLim = manager.settings['outerLim']
@@ -22,10 +22,12 @@ class Solver(object):
     def solve(self):
         """Here we go."""
         nSteps = self.tgrid.size
-        for timeLevel, tn in enumerate(self.tgrid):
-            print("INFO: Solving for time {}. Level {} of {}"
-                  .format(tn, timeLevel, nSteps))
-            dt = None if not tn else (self.tgrid[tn] - self.tgrid[tn - 1])
+        for timeLevel  in range(1, nSteps):
+            tn= self.tgrid[timeLevel]
+            print("INFO: Solving for time level {} of {}"
+                  .format(timeLevel, nSteps))
+            dt = None if not timeLevel else (self.tgrid[timeLevel] 
+                                             - self.tgrid[timeLevel - 1])
             self.__outerIteration(timeLevel, tn, dt)
 
     def __outerIteration(self, timeLevel, tn, dt):
@@ -34,7 +36,6 @@ class Solver(object):
         innerEps = self.innerEps
         innerLim = self.innerLim
         outerLim = self.outerLim
-        dt = self.tgrid[tn] - self.tgrid[tn - 1]
         for outerI in range(self.outerLim):
             maxSourceError = 0
             print("DEBG: Outer iteration {} of {}".format(outerI, outerLim))
@@ -46,14 +47,14 @@ class Solver(object):
             #
             maxFluxError = 0
             for innerI in range(innerLim):
-                for indexM, mu in enumerate(self.angles):
+                for indexMu, mu in enumerate(self.angles):
                     muPos = mu > 0
                     meshes = self.meshes if muPos else self.meshes[::-1]
                     for mesh in meshes:
-                        mesh.solveInner(indexM, mu, muPos, timeLevel, tn, dt, innerI)
+                        mesh.solveInner(indexMu, mu, muPos, timeLevel, dt, innerI)
 
                 for mesh in self.meshes:
-                    fluxError = mesh.getFluxDifference()
+                    fluxError = mesh.getFluxDifference(innerIndex)
                     if fluxError is None:
                         continue
                     maxFluxError = max(maxFluxError, fluxError)
@@ -65,7 +66,8 @@ class Solver(object):
                       .format(innerLim, maxFluxError))
 
             for mesh in self.meshes():
-                sourceError= mesh.sourceDifference()
+                mesh.finishInner(innerI, timeLevel)
+                sourceError = mesh.sourceDifference()
                 if sourceError is None:
                     continue
                 maxSourceError = max(sourceError, maxSourceError)
@@ -75,4 +77,6 @@ class Solver(object):
             print("WARN: Outer iteration did not converge "
                   "after {} iterations. Max source difference: {}"
                   .format(outerLim, maxSourceError))
+        for mesh in self.meshes():
+            mesh.coeffs[timeLevel] = mesh.inner(innerIndex)
 

@@ -216,15 +216,15 @@ class Manager(object):
                         cell.upwindMeshes[mu] = None
                         self.__meshAsBoundary(mu, cell, pos) 
                         continue
-                    cell.upwindMeshes[mu] = self.meshes[1]
-                    continue
+                    # cell.upwindMeshes[mu] = self.meshes[1]
+                    # continue
                 if indx == last:
-                    if pos:
-                        cell.upwindMeshes[mu] = self.meshes[-2]
+                    if not pos:
+                        cell.upwindMeshes[mu] = None
+                        self.__meshAsBoundary(mu, cell, pos) 
                         continue
-                    cell.upwindMeshes[mu] = None
-                    self.__meshAsBoundary(mu, cell, pos) 
-                    continue
+                    # cell.upwindMeshes[mu] = self.meshes[-2]
+                    # continue
                 offset = (1 if pos else - 1) 
                 cell.upwindMeshes[mu] = self.meshes[indx - offset]
 
@@ -294,4 +294,5 @@ def buildGridVector(bounds, divisions, start=0):
 
 if __name__ == "__main__":
     manager = Manager(INPUT_FILE).main()
+    manager.solve()
 
