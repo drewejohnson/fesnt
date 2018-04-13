@@ -19,13 +19,6 @@ class Solver(object):
         self.innerEps = manager.settings['innerEps']
         self.outerEps = manager.settings['outerEps']
 
-    @property
-    def iterCriteria(self):
-        """Return the iteration criteria."""
-        keys = {pref + suf for pref, suf in product(('inner', 'outer'),
-                                                    ('Lim', 'Eps'))}
-        return {key: getattr(self, key) for key in keys}
-
     def solve(self):
         """Here we go."""
         nSteps = self.tgrid.size
@@ -46,7 +39,7 @@ class Solver(object):
             maxSourceError = 0
             print("DEBG: Outer iteration {} of {}".format(outerI, outerLim))
             for mesh in self.meshes:
-               mesh.updateSourceOuter()
+               mesh.updateSourceOuter(tn)
 
             #
             # inner iterations

@@ -1,14 +1,14 @@
 """
 Class for storing mesh values and mesh locations
 """
-from itertools import product
-from numpy import empty, linspace, float64, array, fabs, zeros
+from itertools import product as iter_product
+from numpy import empty, linspace, float64, array, fabs, zeros, product, power
 from poly import buildLagrangeCoeffs
 
 SOURCE_FACTOR = float64(0.5)
 POLY_ORDER = 2
 NOT_RDY_MSG = "{} {} for mesh {}"
-
+SIMPSONS_COEFFS = array((0.5, 2, 0.5))
 
 class LIFOList(list):
     """LIFO list that stores two items.
@@ -25,7 +25,7 @@ class Mesh(object):
         'upwindMeshes', 'corners', 'material', 'femPoints', 'dx',
         'coeffs', '__recent',  'points', 'polyWeights', 'manager', 
         'nAngles', '__bc', '__scalarCoeffs', '__source', '__unknowns',
-        'sourceXS')
+        'sourceXS', '__sigT')
 
     def __init__(self, manager, points, material):
         self.manager = manager
@@ -33,8 +33,10 @@ class Mesh(object):
         xs = material.xs
         self.corners = (points.min(), points.max())
         self.dx = self.corners[1] - self.corners[0]
-        self.sourceXS = SOURCE_FACTOR * (
+        sourceXS = SOURCE_FACTOR * (
             xs['scatt0'] + xs['chit'] * xs['nubar'] * xs['fiss']) * self.dx * 0.5
+        self.__sigT = xs['total'][0]
+        self.sourceXS = sourceXS[0]
         self.coeffs = None
         self.upwindMeshes = {}
         self.__recent = None
@@ -107,17 +109,18 @@ class Mesh(object):
         self.__scalarCoeffs.prepend((self.coeffs[0] * self.manager.weights).sum(axis=0))
         self.__source = LIFOList()
    
-    def updateSourceOuter(self):
+    def updateSourceOuter(self, tn):
         """Create the internal source vector for each trial function."""
         scalar = self.scalarCoeffs
-        nr, nc = self.nUnknowns, self.femPoints.size
+        nu = self.femPoints.size
         newSource = empty((nu, nu), dtype=float64)
         newSource.fill(self.sourceXS)
-        for ii, jj in product(range(nu), range(nu)):
+        for ii, jj in iter_product(range(nu), range(nu)):
             mult = (4 if jj == 1 else 1)  # multiplier for simpsons integration
         #TODO: Update source vector for each iteration with integral coeffs from known fluxes from upwind, boundary conditions
             newSource[ii, jj] = self.femPoints[jj] ** ii * scalar[jj] * mult
         self.__source.prepend(newSource.sum(axis=1))
+        self.__recents.prepend(self.coefs[tn - 1])
         return self.source
 
     def sourceDifference(self):
@@ -128,7 +131,7 @@ class Mesh(object):
 
     def solve(self, indexMu, mu, muPos, timeLevel, tn, dt):
         """Solve the FEM for this mesh."""
-        source = self.__updateSource(mu, indexMu, muPos, tn)
+        source = self.__updateSource(mu, indexMu, muPos, tn, dt)
         upwM = self.upwindMeshes[mu]
         nU = self.nUnknowns[mu]
         if upwM is not None:
@@ -137,23 +140,22 @@ class Mesh(object):
             upwValue = upwM.recent[upwPntIndx]
             for ii in range(nU):
                 source[ii] += upwValue * xUpw ** ii
-        coeffM = empty((self.nUnknowns, self.nUnknowns), dtype=float64)
+        coeffM = empty((nU, nU), dtype=float64)
         #TODO: Implement full matrix formulation
         #TODO:W: Cython inner linear solve?
 
     def __updateSource(self, mu, indexMu, muPos, tn, dt):
         source = self.source
-        bc = self.__bc[0 if muPos else 1]
+        bc = self.__bc[0 if muPos else -1]
         upwM = self.upwindMeshes[mu]
         jmpValue = 0
         bcValue = 0
-        if upwM is None or bc is None:
-            return source
+        fromTMatrix = None 
+        muAbs = fabs(mu) if muPos else mu
         if upwM is not None:
             upwPntIndx = -1 if muPos else 0
             xUpw = upwM.femPoints[upwPntIndx]
             upwValue = upwM.recent[0, indexMu, upwPntIndx]
-            muAbs = fabs(mu) if muPos else mu
             jmpValue = muAbs * upwValue
         if bc is not None and bc != 0:
             boundIndx = 0 if muPos else -1
@@ -165,12 +167,26 @@ class Mesh(object):
                     bcValue = self.recent[-1 - indexMu, boundIndx]
             else:
                 bcValue = bc(tn, mu)
-        for ii in range(self.nUnknowns):
+        self.__recent[0][indexMu, boundIndx] = bcValue
+        if bcValue:
+            #
+            # add simpson's integration terms
+            #
+            fromAMatrix = mu * (self.polyWeights[1:, boundIndx] * (1, 2) * 
+                                bcValue * self.dx * 0.5)
+        if dt:
+            fromTMatrix = ((self.coeffs[tn - 1, mu, :] * self.dx) * SIMPSONS_COEFFS 
+                            / dt)
+        for ii in range(self.__unknowns[mu]):
             if jmpValue:
                 source[ii] += jmpValue * (xUpw ** ii)
             if bcValue:
-                source[ii] += bcValue * (boundX ** ii)
+                intSum = (fromAMatrix* power(boundX, (ii, ii +1))).sum()
+                source[ii] -= bcValue * intSum
+            if fromTMatrix is not None:
+                source[ii] += (fromTMatrix * power(self.femPoints, ii).sum())
         return source
+
 
     def getFluxDifference(self):
         """Return the difference between fluxes between two iterations."""
