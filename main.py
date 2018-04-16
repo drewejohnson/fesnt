@@ -284,7 +284,7 @@ def _checkGeomBlock(opts, uFromRes):
     assert len(opts['universes']) == len(opts['bounds']) == len(opts['divisions'])
     uInRes = set(uFromRes.keys())
     requestedU = opts.pop('universes')
-    diffU = uInRes.symmetric_difference(set(requestedU))
+    diffU = set(requestedU).difference(uInRes)
     if diffU:
         raise KeyError(diffU)
     opts = _validateBounds(opts)
