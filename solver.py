@@ -23,7 +23,7 @@ class Solver(object):
     def solve(self):
         """Here we go."""
         if self.__isEig:
-            self.__outerIteration(0, 0, None)
+            self.__outerIteration(0, 0, 0)
         if self.tgrid is None or not any(self.tgrid):
             return
         nSteps = self.tgrid.size
@@ -32,11 +32,11 @@ class Solver(object):
             print("INFO: Solving for time level {} of {}"
                   .format(timeLevel, nSteps))
             dt = self.tgrid[timeLevel] - self.tgrid[timeLevel - 1]
-            status = self.__outerIteration(timeLevel, tn, dt)
+            status = self.__outerIteration(timeLevel, tn, 1 / dt)
             if status and status[0].lower() == 'q':
                 return timeLevel
 
-    def __outerIteration(self, timeLevel, tn, dt):
+    def __outerIteration(self, timeLevel, tn, dtInv):
         """Outer iteration at the given time level"""
         outerEps = self.outerEps
         outerLim = self.outerLim
@@ -54,7 +54,7 @@ class Solver(object):
             for mesh in self.meshes:
                mesh.updateSourceOuter(tn)
             
-            innerIndex = self.__innerIteration(timeLevel, tn, dt)
+            innerIndex = self.__innerIteration(timeLevel, tn, dtInv)
 
             for mesh in self.meshes:
                 mesh.finishInner(innerIndex)
@@ -77,7 +77,7 @@ class Solver(object):
             mesh.coeffs[timeLevel] = mesh.inner(innerIndex)
         return input("Enter <q> to quit: ")
 
-    def __innerIteration(self, timeLevel, tn, dt):
+    def __innerIteration(self, timeLevel, tn, dtInv):
         innerEps = self.innerEps
         innerLim = self.innerLim
         maxFluxError = None 
@@ -86,7 +86,7 @@ class Solver(object):
                 muPos = mu > 0
                 meshes = self.meshes if muPos else self.meshes[::-1]
                 for mesh in meshes:
-                    mesh.solveInner(indexMu, mu, muPos, timeLevel, dt, innerIndex)
+                    mesh.solveInner(indexMu, mu, muPos, timeLevel, tn, dtInv, innerIndex)
 
             for mesh in self.meshes:
                 fluxError = mesh.getFluxDifference(innerIndex)

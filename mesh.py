@@ -3,7 +3,7 @@ Class for storing mesh values and mesh locations
 """
 from itertools import product
 from numpy import (empty, linspace, float64, array, fabs, zeros, multiply,
-                   power, empty_like)
+                   power, empty_like, arange)
 from poly import buildLagrangeCoeffs
 from scipy.linalg import solve as linalg_solve
 SOURCE_FACTOR = float64(0.5)
@@ -128,98 +128,6 @@ class Mesh(object):
             return
         return fabs(self.__source[0] - self.__source[1]).max()
 
-    def solveInner(self, indexMu, mu, muPos, tn, dt, innerIndex):
-        """Solve the FEM for this mesh at the given time level and inner iteration."""
-        source = self.__updateSourceInner(mu, indexMu, muPos, tn, dt, innerIndex)
-        upwM = self.upwindMeshes[mu]
-        nU = self.__unknowns[mu]
-        upwJump = None
-        thisJump = None 
-        if nU != len(self.femPoints):
-            jVec = (1, 2) if muPos else (0, 1)
-        else:
-            jVec = range(nU)
-        jVec = array(jVec)
-        #TODO:W: Store jVec on __unknowns so we don't have to rebuild
-        coeffM = self.__buildAMatrix(nU, jVec) * mu
-        if upwM is not None:
-            #TODO:W: Share this code with __updateSourceInner
-            upwPntIndex = 2 if muPos else 0
-            thisPntIndex = 0 if muPos else 2 
-            xUpw = upwM.femPoints[upwPntIndex]
-            upwValue = upwM.inner(innerIndex)[indexMu, upwPntIndex]
-            thisValue = self.__inner[innerIndex, indexMu ,thisPntIndex]
-        tMatrixLead = self.__sigT + (1 / dt if dt else 0)
-        for ii in range(nU):
-            if upwJump:
-                source[ii] += upwValue * (xUpw ** ii)
-                # b matrix - jump terms
-            if thisJump:
-                coeffM[ii, thisPntIndex] += thisValue * (xUpw * ii)  
-            for jj, femPnt in enumerate(jVec):
-                coeffM[ii, jj] += (tMatrixLead * SIMPSONS_COEFFS_HALVED[femPnt] 
-                                   * (self.femPoints[femPnt] ** ii))
-        # the actual solve
-        soln = linalg_solve(coeffM, source)
-        self.__inner[innerIndex, indexMu, jVec] = soln
-        return soln
-
-    def __updateSourceInner(self, mu, indexMu, muPos, tn, dt, innerIndex):
-        nU = self.__unknowns[mu]
-        source = self.source[:nU]
-        boundIndex = 0 if muPos else -1
-        bc = self.__bc[boundIndex]
-        upwM = self.upwindMeshes[mu]
-        jmpValue = 0
-        bcValue = 0
-        boundX = self.femPoints[boundIndex]
-        fromTMatrix = None 
-        muAbs = fabs(mu) if muPos else mu
-        if upwM is not None:
-            upwPntIndex = -1 if muPos else 0
-            xUpw = upwM.femPoints[upwPntIndex]
-            upwValue = upwM.inner(innerIndex)[indexMu, upwPntIndex]
-            jmpValue = muAbs * upwValue
-        if bc is not None and bc != 0:
-            if isinstance(bc, (float, int)):
-                if bc > 0:
-                    bcValue = bc
-                else:
-                    bcValue = self.__inner[innerIndex, 
-                                           -1 - indexMu, boundIndex]
-            else:
-                bcValue = bc(tn, mu)
-        self.__inner[innerIndex, indexMu, boundIndex] = bcValue
-        if bcValue:
-            #
-            # add simpson's integration terms
-            #
-            fromAMatrix = mu * (self.polyWeights[boundIndex, 1:] * (1, 2) * 
-                                bcValue * self.dx * 0.5)
-        if dt:
-            fromTMatrix = ((self.coeffs[tn - 1, indexMu, :] * self.dx) * 
-                           SIMPSONS_COEFFS_HALVED / dt)
-        for ii in range(nU):
-            if jmpValue:
-                source[ii] += jmpValue * (xUpw ** ii)
-            if bcValue:
-                intSum = fromAMatrix* power(boundX, (ii, ii +1))
-                source[ii] -= bcValue * intSum.sum()
-            if fromTMatrix is not None:
-                source[ii] += (fromTMatrix * power(self.femPoints, ii)).sum()
-        return source
-
-    def __buildAMatrix(self, nU, jVec):
-        """Build the inner iteration matrix for d\psi/dx."""
-        coeffM = empty((nU, nU), dtype=float64)
-        for ii, jj in product(range(nU), repeat=2):
-            temp = 0
-            for ll, alpha in enumerate(self.polyWeights[jj]):
-                temp += ll * alpha * self.femPoints[jVec[jj]] ** (ll + ii)
-            coeffM[ii, jj] = temp * SIMPSONS_COEFFS_HALVED[jj]
-            
-        return coeffM * self.dx
-
     def getFluxDifference(self, innerIndex):
         """Return the difference between fluxes between two iterations."""
         if not innerIndex:
@@ -259,26 +167,63 @@ class Mesh(object):
 
     def getJumpTerms(self, nUnknowns, mu, indexMu, muPos, innerIndex):
         """Return the jump vectors for this and the upwind mesh."""
-        upwMesh = self.upwindMeshes[mu]
-        upwPntIndex = POLY_ORDER if muPos else 0
         thisPntIndex = 0 if muPos else POLY_ORDER
-        upwX = upwMesh.femPoints[upwPntIndex]
         thisX = self.femPoints[thisPntIndex]
-        upwValue = upwMesh.inner(innerIndex)[indexMu, upwPntIndex]
         thisValue = self.__inner[innerIndex, indexMu, upwPntIndex]
         thisVec = empty(nUnknowns)
-        upwVec = empty(nUnknowns)
+        upwMesh = self.upwindMeshes[mu]
+        if upwMesh is not None:
+            upwPntIndex = POLY_ORDER if muPos else 0
+            upwX = upwMesh.femPoints[upwPntIndex]
+            upwValue = upwMesh.inner(innerIndex)[indexMu, upwPntIndex]
+            upwVec = empty(nUnknowns)
+        else:
+            upwVec = None
+        absMu = mu if muPos else fabs(mu)
         for ii in range(nUnknowns):
             thisVec[ii] = thisValue * (thisX ** ii)
-            upwVec[ii] = upwValue * (upwX ** ii)
-        return thisVec, upwVec
+            if upwVec is not None:
+                upwVec[ii] = upwValue * (upwX ** ii)
+        return thisVec * absMu, upwVec * absMu
 
-
-
-if __name__ == '__main__':
-    from main import Manager
-    m = Manager('./input-1.yaml')
-    m.initialize()
-    m0 = m.meshes[0]
-    a = m0.buildAMatrix(2, m.angles[1,0])
-
+    def solve(self, indexMu, mu, muPos, timeLevel, tn, dtInv, innerIndex):
+        nUnknowns = self.__unknowns[mu]
+        aCoeffs = self.buildAMatrix(nUnknowns, mu)
+        cCoeffs = self.buildCMatrix(nUnknowns)
+        thisJump, upwJump = self.getJumpTerms(nUnknowns, mu, indexMu,
+                                              muPos, innerIndex)
+        thisJumpCol = 0 if muPos else POLY_ORDER
+        source = self.source
+        coeffMat = empty((nUnknowns, nUnknowns))
+        if self.upwindMeshes[mu] is None:
+            knownIndex = 0 if muPos else POLY_ORDER
+            unknownSlice = arange(0, POLY_ORDER)
+            if muPos:
+                unknownSlice += 1
+        else:
+            knownIndex = None
+            unknownSlice = slice(None)
+            bcValue = self.__getBC(indexMu, mu, muPos, tn, innerIndex)
+            self.__inner[innerIndex, indexMu, bcIndex] = bcValue
+        coeffMat[:, :] = aCoeffs[:, unknownSlice]
+        coeffMat += (self.__sigT + dtInv) * cCoeffs[:, unknownSlice]
+        coeffMat[:, thisJumpCol] += thisJump
+        prevTimeVals = self.coeffs[timeLevel - 1, indexMu]
+        source += cCoeffs[:, unknownSlice].dot(prevTimeVals[unknownSlice]
+        if knownIndex is not None:
+            source -= (
+                aCoeffs[:, knownIndex]
+                + self.__sigT * cCoeffs[:, knownIndex]) * bcValue
+    
+    def __getBC(self, indexMu, mu, muPos, tn, innerIndex):
+        bc = self.__bc[0 if muPos else 1]
+        bcValue = 0
+        bcIndex = 0 if muPos else POLY_ORDER
+        prevIndex = innerIndex - 1 if innerIndex else innerIndex
+        if isinstance(bc, (float, int)):
+            if not bcValue:
+                return 0
+            if bcValue < 0:
+                return self.__inner[prevIndex, -1 - indexMu, bcIndex]
+            return bcValue
+        return bc(tn, mu)
