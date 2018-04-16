@@ -18,5 +18,5 @@ initial:
     flux: 0
 innerLim: 100
 innerEps: 1E-6
-outerLim: 100
+outerLim: 1000000
 outerEps: 1E-6

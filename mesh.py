@@ -1,7 +1,7 @@
 """
 Class for storing mesh values and mesh locations
 """
-from itertools import product as iter_product
+from itertools import product
 from numpy import (empty, linspace, float64, array, fabs, zeros, multiply,
                    power, empty_like)
 from poly import buildLagrangeCoeffs
@@ -11,9 +11,6 @@ POLY_ORDER = 2
 NOT_RDY_MSG = "{} {} for mesh {}"
 SIMPSONS_COEFFS_HALVED = array((0.5, 2, 0.5))
 
-#
-# imports for debugging
-#
 from numpy import isnan
 class LIFOList(list):
     """LIFO list that stores two items.
@@ -117,7 +114,7 @@ class Mesh(object):
         nu = self.femPoints.size
         newSource = empty((nu, nu), dtype=float64)
         newSource.fill(self.sourceXS)
-        for ii, jj in iter_product(range(nu), repeat=2):
+        for ii, jj in product(range(nu), repeat=2):
             mult = (4 if jj == 1 else 1)  # multiplier for simpsons integration
         #TODO: Update source vector for each iteration with integral coeffs from known fluxes from upwind, boundary conditions
             newSource[ii, jj] = self.femPoints[jj] ** ii * scalar[jj] * mult
@@ -214,7 +211,7 @@ class Mesh(object):
     def __buildAMatrix(self, nU, jVec):
         """Build the inner iteration matrix for d\psi/dx."""
         coeffM = empty((nU, nU), dtype=float64)
-        for ii, jj in iter_product(range(nU), repeat=2):
+        for ii, jj in product(range(nU), repeat=2):
             temp = 0
             for ll, alpha in enumerate(self.polyWeights[jj]):
                 temp += ll * alpha * self.femPoints[jVec[jj]] ** (ll + ii)
@@ -224,7 +221,6 @@ class Mesh(object):
 
     def getFluxDifference(self, innerIndex):
         """Return the difference between fluxes between two iterations."""
-        #TODO: Implement flux difference
         if not innerIndex:
             return
         return fabs((self.__inner[innerIndex] 
@@ -235,4 +231,45 @@ class Mesh(object):
         self.__inner = empty_like(self.__inner)
         self.__inner[0] = scratch
         self.__scalarCoeffs.prepend((self.__inner[innerIndex] * self.manager.weights).sum(axis=0))
+
+    def buildAMatrix(self, nUnknowns, mu):
+        """Build the matrix of ``a_{i,j}`` coefficients"""
+        mat = empty((nUnknowns, self.femPoints.size))
+        front = self.dx * mu
+        alphas = self.polyWeights
+        for ii, jj in product(range(nUnknowns), range(self.femPoints.size)):
+            temp = 0
+            for ll in range(1, POLY_ORDER + 1):
+                temp += (
+                    ll * alphas[jj, ll] *
+                    (self.femPoints[jj] ** (ll - 1 + ii)) 
+                    * SIMPSONS_COEFFS_HALVED[jj] )
+            mat[ii, jj] = front * temp
+        return mat
+
+    def buildCMatrix(self, nUnknowns):
+        """Return the matrix of ``c_{i,j}`` coefficients"""
+        mat = empty((nUnknowns, self.femPoints.size))
+        for ii, jj in product(range(nUnknowns), range(self.femPoints.size)):
+            mat[ii, jj] = (
+                    self.dx * SIMPSONS_COEFFS_HALVED[jj] 
+                    * (self.femPoints[jj] ** ii))
+        return mat
+
+    def getJumpTerms(self, nUnknowns, mu, muPos):
+        """Return the jump vectors for this and the upwind mesh."""
+        upwMesh = self.upwindMeshes[mu]
+        upwPntIndex = POLY_ORDER if muPos else 0
+        thisPntIndex = 0 if muPos else POLY_ORDER
+        thisVec = empty(nUnknowns)
+        upwVec = empty(nUnknowns)
+
+
+
+if __name__ == '__main__':
+    from main import Manager
+    m = Manager('./input-1.yaml')
+    m.initialize()
+    m0 = m.meshes[0]
+    a = m0.buildAMatrix(2, m.angles[1,0])
 
