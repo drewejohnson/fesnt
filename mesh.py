@@ -187,7 +187,8 @@ class Mesh(object):
                 if bc > 0:
                     bcValue = bc
                 else:
-                    bcValue = self.recent[-1 - indexMu, boundIndex]
+                    bcValue = self.__inner[innerIndex, 
+                                           -1 - indexMu, boundIndex]
             else:
                 bcValue = bc(tn, mu)
         self.__inner[innerIndex, indexMu, boundIndex] = bcValue
@@ -233,4 +234,4 @@ class Mesh(object):
         scratch = self.__inner[innerIndex]
         self.__inner = empty_like(self.__inner)
         self.__inner[0] = scratch
-
+        self.__scalarCoeffs.prepend((self.__inner[innerIndex] * self.manager.weights).sum(axis=0))

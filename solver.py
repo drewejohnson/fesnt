@@ -38,9 +38,17 @@ class Solver(object):
         """Outer iteration at the given time level"""
         outerEps = self.outerEps
         outerLim = self.outerLim
+        updateAt = outerLim // 10
+        prevSourceError = None
+        maxSourceError = None
         for outerIndex in range(self.outerLim):
+            prevSourceError = maxSourceError
             maxSourceError = None 
-            print("DEBG: Outer iteration {} of {}".format(outerIndex, outerLim))
+            if outerIndex % updateAt == 0:
+                msg ="INFO: Outer iteration {} of {}".format(outerIndex, outerLim)
+                if prevSourceError is not None:
+                    msg += ". Source Error: {:7.5E}".format(prevSourceError)
+                print(msg)
             for mesh in self.meshes:
                mesh.updateSourceOuter(tn)
             
@@ -56,8 +64,8 @@ class Solver(object):
                     continue
                 maxSourceError = max(sourceError, maxSourceError)
             if maxSourceError is not None and maxSourceError <= outerEps:
-                print("DEBG: Outer iteraiton converged after {} iterations. "
-                      "Max source error: {:7.5E}".format(outerIndex, maxSourceError))
+                print("DEBG: Outer iteration converged after {} iterations. "
+                      "Max source error: {:7.5E}".format(outerIndex + 1, maxSourceError))
                 break
         else:
             print("WARN: Outer iteration did not converge "
@@ -65,6 +73,7 @@ class Solver(object):
                   .format(outerLim, maxSourceError))
         for mesh in self.meshes:
             mesh.coeffs[timeLevel] = mesh.inner(innerIndex)
+        input("Press enter to continue: ")
 
     def __innerIteration(self, timeLevel, tn, dt):
         innerEps = self.innerEps
@@ -86,8 +95,8 @@ class Solver(object):
                     continue
                 maxFluxError = max(maxFluxError, fluxError)
             if maxFluxError is not None and maxFluxError <= innerEps:
-                print("DEBG: Inner iteraiton converged after {} iterations. "
-                      "Max flux error: {:7.5E}".format(innerIndex, maxFluxError))
+                # print("DEBG: Inner iteration converged after {} iterations. "
+                #       "Max flux error: {:7.5E}".format(innerIndex + 1, maxFluxError))
                 break
         else:
             print("WARN: Inner iterations did not converge after "
