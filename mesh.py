@@ -3,7 +3,7 @@ Class for storing mesh values and mesh locations
 """
 from itertools import product
 from numpy import (empty, linspace, float64, array, fabs, zeros, multiply,
-                   power, empty_like, arange)
+                   power, empty_like, arange, zeros_like)
 from poly import buildLagrangeCoeffs
 from scipy.linalg import solve as linalg_solve
 SOURCE_FACTOR = float64(0.5)
@@ -169,7 +169,7 @@ class Mesh(object):
         """Return the jump vectors for this and the upwind mesh."""
         thisPntIndex = 0 if muPos else POLY_ORDER
         thisX = self.femPoints[thisPntIndex]
-        thisValue = self.__inner[innerIndex, indexMu, upwPntIndex]
+        thisValue = self.__inner[innerIndex, indexMu, thisPntIndex]
         thisVec = empty(nUnknowns)
         upwMesh = self.upwindMeshes[mu]
         if upwMesh is not None:
@@ -184,41 +184,50 @@ class Mesh(object):
             thisVec[ii] = thisValue * (thisX ** ii)
             if upwVec is not None:
                 upwVec[ii] = upwValue * (upwX ** ii)
-        return thisVec * absMu, upwVec * absMu
+        return (thisVec * absMu, upwVec * absMu if upwVec is not None 
+                                  else zeros(nUnknowns))
 
-    def solve(self, indexMu, mu, muPos, timeLevel, tn, dtInv, innerIndex):
+    def solveInner(self, indexMu, mu, muPos, timeLevel, tn, dtInv, innerIndex):
         nUnknowns = self.__unknowns[mu]
         aCoeffs = self.buildAMatrix(nUnknowns, mu)
         cCoeffs = self.buildCMatrix(nUnknowns)
         thisJump, upwJump = self.getJumpTerms(nUnknowns, mu, indexMu,
                                               muPos, innerIndex)
-        thisJumpCol = 0 if muPos else POLY_ORDER
-        source = self.source
+        thisJumpCol = 0 if muPos else -1
         coeffMat = empty((nUnknowns, nUnknowns))
         if self.upwindMeshes[mu] is None:
             knownIndex = 0 if muPos else POLY_ORDER
             unknownSlice = arange(0, POLY_ORDER)
             if muPos:
                 unknownSlice += 1
+            bcIndex = 0 if muPos else POLY_ORDER
+            bcValue = self.__getBC(indexMu, mu, muPos, tn, innerIndex, 
+                                   bcIndex)
+            self.__inner[innerIndex + 1, indexMu, bcIndex] = bcValue
         else:
             knownIndex = None
-            unknownSlice = slice(None)
-            bcValue = self.__getBC(indexMu, mu, muPos, tn, innerIndex)
-            self.__inner[innerIndex, indexMu, bcIndex] = bcValue
+            unknownSlice = arange(POLY_ORDER + 1)
         coeffMat[:, :] = aCoeffs[:, unknownSlice]
         coeffMat += (self.__sigT + dtInv) * cCoeffs[:, unknownSlice]
         coeffMat[:, thisJumpCol] += thisJump
         prevTimeVals = self.coeffs[timeLevel - 1, indexMu]
-        source += cCoeffs[:, unknownSlice].dot(prevTimeVals[unknownSlice]
+        source = self.source[unknownSlice]
+        source += cCoeffs[:, unknownSlice].dot(prevTimeVals[unknownSlice])
         if knownIndex is not None:
             source -= (
                 aCoeffs[:, knownIndex]
                 + self.__sigT * cCoeffs[:, knownIndex]) * bcValue
+
+        #
+        # apply the linear solve
+        #
+        soln = linalg_solve(coeffMat, source)
+        self.__inner[innerIndex + 1:, indexMu, unknownSlice] = soln
+        return soln
     
-    def __getBC(self, indexMu, mu, muPos, tn, innerIndex):
+    def __getBC(self, indexMu, mu, muPos, tn, innerIndex, bcIndex):
         bc = self.__bc[0 if muPos else 1]
         bcValue = 0
-        bcIndex = 0 if muPos else POLY_ORDER
         prevIndex = innerIndex - 1 if innerIndex else innerIndex
         if isinstance(bc, (float, int)):
             if not bcValue:

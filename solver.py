@@ -81,7 +81,7 @@ class Solver(object):
         innerEps = self.innerEps
         innerLim = self.innerLim
         maxFluxError = None 
-        for innerIndex in range(innerLim):
+        for innerIndex in range(innerLim - 1):
             for indexMu, mu in enumerate(self.angles):
                 muPos = mu > 0
                 meshes = self.meshes if muPos else self.meshes[::-1]
