@@ -7,7 +7,7 @@ from numpy import empty
 class Solver(object):
 
     __slots__ = ('meshes', 'quad', 'starts', 'tgrid', 'nGroups', 'innerLim',
-                 'innerEps', 'outerEps', 'outerLim', 'angles')
+                 'innerEps', 'outerEps', 'outerLim', 'angles', '__isEig')
 
     def __init__(self, manager):
         self.meshes = manager.meshes
@@ -18,16 +18,20 @@ class Solver(object):
         self.outerLim = manager.settings['outerLim']
         self.innerEps = manager.settings['innerEps']
         self.outerEps = manager.settings['outerEps']
+        self.__isEig = manager.calcType == 'eig'
 
     def solve(self):
         """Here we go."""
+        if self.__isEig:
+            self.__outerIteration(0, 0, None)
+        if self.tgrid is None or not any(self.tgrid):
+            return
         nSteps = self.tgrid.size
         for timeLevel  in range(1, nSteps):
             tn= self.tgrid[timeLevel]
             print("INFO: Solving for time level {} of {}"
                   .format(timeLevel, nSteps))
-            dt = None if not timeLevel else (self.tgrid[timeLevel] 
-                                             - self.tgrid[timeLevel - 1])
+            dt = self.tgrid[timeLevel] - self.tgrid[timeLevel - 1]
             self.__outerIteration(timeLevel, tn, dt)
 
     def __outerIteration(self, timeLevel, tn, dt):
@@ -35,7 +39,7 @@ class Solver(object):
         outerEps = self.outerEps
         outerLim = self.outerLim
         for outerIndex in range(self.outerLim):
-            maxSourceError = 0
+            maxSourceError = None 
             print("DEBG: Outer iteration {} of {}".format(outerIndex, outerLim))
             for mesh in self.meshes:
                mesh.updateSourceOuter(tn)
@@ -47,8 +51,11 @@ class Solver(object):
                 sourceError = mesh.sourceDifference()
                 if sourceError is None:
                     continue
+                if maxSourceError is None:
+                    maxSourceError = sourceError
+                    continue
                 maxSourceError = max(sourceError, maxSourceError)
-            if maxSourceError <= outerEps:
+            if maxSourceError is not None and maxSourceError <= outerEps:
                 print("DEBG: Outer iteraiton converged after {} iterations. "
                       "Max source error: {:7.5E}".format(outerIndex, maxSourceError))
                 break
@@ -62,7 +69,7 @@ class Solver(object):
     def __innerIteration(self, timeLevel, tn, dt):
         innerEps = self.innerEps
         innerLim = self.innerLim
-        maxFluxError = 0
+        maxFluxError = None 
         for innerIndex in range(innerLim):
             for indexMu, mu in enumerate(self.angles):
                 muPos = mu > 0
@@ -74,8 +81,11 @@ class Solver(object):
                 fluxError = mesh.getFluxDifference(innerIndex)
                 if fluxError is None:
                     continue
+                if maxFluxError is None:
+                    maxFluxError = fluxError
+                    continue
                 maxFluxError = max(maxFluxError, fluxError)
-            if maxFluxError <= innerEps:
+            if maxFluxError is not None and maxFluxError <= innerEps:
                 print("DEBG: Inner iteraiton converged after {} iterations. "
                       "Max flux error: {:7.5E}".format(innerIndex, maxFluxError))
                 break
