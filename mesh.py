@@ -167,7 +167,8 @@ class Mesh(object):
         return soln
 
     def __updateSourceInner(self, mu, indexMu, muPos, tn, dt, innerIndex):
-        source = self.source[:self.__unknowns[mu]]
+        nU = self.__unknowns[mu]
+        source = self.source[:nU]
         boundIndex = 0 if muPos else -1
         bc = self.__bc[boundIndex]
         upwM = self.upwindMeshes[mu]
@@ -194,17 +195,17 @@ class Mesh(object):
             #
             # add simpson's integration terms
             #
-            fromAMatrix = mu * (self.polyWeights[1:, boundIndex] * (1, 2) * 
+            fromAMatrix = mu * (self.polyWeights[boundIndex, 1:] * (1, 2) * 
                                 bcValue * self.dx * 0.5)
         if dt:
             fromTMatrix = ((self.coeffs[tn - 1, indexMu, :] * self.dx) * 
                            SIMPSONS_COEFFS_HALVED / dt)
-        for ii in range(self.__unknowns[mu]):
+        for ii in range(nU):
             if jmpValue:
                 source[ii] += jmpValue * (xUpw ** ii)
             if bcValue:
-                intSum = (fromAMatrix* power(boundX, (ii, ii +1))).sum()
-                source[ii] -= bcValue * intSum
+                intSum = fromAMatrix* power(boundX, (ii, ii +1))
+                source[ii] -= bcValue * intSum.sum()
             if fromTMatrix is not None:
                 source[ii] += (fromTMatrix * power(self.femPoints, ii)).sum()
         return source
@@ -223,6 +224,8 @@ class Mesh(object):
     def getFluxDifference(self, innerIndex):
         """Return the difference between fluxes between two iterations."""
         #TODO: Implement flux difference
+        if not innerIndex:
+            return
         return fabs((self.__inner[innerIndex] 
                     - self.__inner[innerIndex - 1]).max())
 
