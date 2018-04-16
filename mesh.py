@@ -235,3 +235,4 @@ class Mesh(object):
         self.__inner = empty_like(self.__inner)
         self.__inner[0] = scratch
         self.__scalarCoeffs.prepend((self.__inner[innerIndex] * self.manager.weights).sum(axis=0))
+

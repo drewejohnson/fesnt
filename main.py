@@ -9,10 +9,12 @@ TODO:W: Allow a single entry to be entered as divisions and applied to all zones
 TODO:W: Criticality calculation
 """
 
-from numpy import array, empty, sum, diff, linspace
+from numpy import array, empty, sum, diff, linspace, empty_like
 from yaml import safe_load
+from matplotlib import pyplot
 
 from quad import getQuadrature
+from poly import polyval
 from mesh import Mesh
 from solver import Solver
 
@@ -228,6 +230,31 @@ class Manager(object):
                 offset = (1 if pos else - 1) 
                 cell.upwindMeshes[mu] = self.meshes[indx - offset]
 
+    def getAngular(self, timeLevel, pointsPerMesh=10):
+        nPoints = pointsPerMesh * len(self.meshes)
+        xgrid = empty(nPoints)
+        ydata = empty((self.angles.size, nPoints))
+        for mIndx, mesh in enumerate(self.meshes):
+            start = mIndx * pointsPerMesh
+            end = start + pointsPerMesh
+            xPoints =  linspace(mesh.corners[0], mesh.corners[1], 
+                                pointsPerMesh)
+            xgrid[start:end] = xPoints
+            coeffs = mesh.coeffs[timeLevel]
+            for indexMu, mu in enumerate(self.angles[:, 0]):
+                ydata[indexMu, start:end] = polyval(xPoints, coeffs[indexMu])
+        return xgrid, ydata
+
+    def plotAngular(self, timeLevel, ax=None, pointsPerMesh=10):
+        x, y = self.getAngular(timeLevel, pointsPerMesh)
+        ax = ax or pyplot.axes()
+        label = r'$\mu_{indx}={val:5.3f}$'
+        for muIndex, yData in enumerate(y):
+            ax.plot(x, yData, label=label.format(
+                indx=muIndex, val=self.angles[muIndex, 0]))
+        ax.legend()
+        ax.set_title("T = {:7.5f}".format(self.tgrid[timeLevel]))
+        return ax
 
 def scrapeInput(filePath):
     """Scrape the input file."""
@@ -291,6 +318,7 @@ def buildGridVector(bounds, divisions, start=0):
         grid[prevIndx:prevIndx + len(points)] = points
         prevIndx += div + (0 if ii else 1)
     return grid
+
 
 if __name__ == "__main__":
     manager = Manager(INPUT_FILE).main()

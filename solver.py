@@ -32,7 +32,9 @@ class Solver(object):
             print("INFO: Solving for time level {} of {}"
                   .format(timeLevel, nSteps))
             dt = self.tgrid[timeLevel] - self.tgrid[timeLevel - 1]
-            self.__outerIteration(timeLevel, tn, dt)
+            status = self.__outerIteration(timeLevel, tn, dt)
+            if status and status[0].lower() == 'q':
+                return timeLevel
 
     def __outerIteration(self, timeLevel, tn, dt):
         """Outer iteration at the given time level"""
@@ -73,7 +75,7 @@ class Solver(object):
                   .format(outerLim, maxSourceError))
         for mesh in self.meshes:
             mesh.coeffs[timeLevel] = mesh.inner(innerIndex)
-        input("Press enter to continue: ")
+        return input("Enter <q> to quit: ")
 
     def __innerIteration(self, timeLevel, tn, dt):
         innerEps = self.innerEps
