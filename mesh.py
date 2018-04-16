@@ -107,6 +107,7 @@ class Mesh(object):
         self.coeffs[0].fill(value)
         self.__scalarCoeffs.prepend((self.coeffs[0] * self.manager.weights).sum(axis=0))
         self.__source = LIFOList()
+        self.__inner[0] = self.coeffs[0]
    
     def updateSourceOuter(self, tn):
         """Create the internal source vector for each trial function."""
@@ -256,13 +257,21 @@ class Mesh(object):
                     * (self.femPoints[jj] ** ii))
         return mat
 
-    def getJumpTerms(self, nUnknowns, mu, muPos):
+    def getJumpTerms(self, nUnknowns, mu, indexMu, muPos, innerIndex):
         """Return the jump vectors for this and the upwind mesh."""
         upwMesh = self.upwindMeshes[mu]
         upwPntIndex = POLY_ORDER if muPos else 0
         thisPntIndex = 0 if muPos else POLY_ORDER
+        upwX = upwMesh.femPoints[upwPntIndex]
+        thisX = self.femPoints[thisPntIndex]
+        upwValue = upwMesh.inner(innerIndex)[indexMu, upwPntIndex]
+        thisValue = self.__inner[innerIndex, indexMu, upwPntIndex]
         thisVec = empty(nUnknowns)
         upwVec = empty(nUnknowns)
+        for ii in range(nUnknowns):
+            thisVec[ii] = thisValue * (thisX ** ii)
+            upwVec[ii] = upwValue * (upwX ** ii)
+        return thisVec, upwVec
 
 
 

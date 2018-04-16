@@ -218,15 +218,11 @@ class Manager(object):
                         cell.upwindMeshes[mu] = None
                         self.__meshAsBoundary(mu, cell, pos) 
                         continue
-                    # cell.upwindMeshes[mu] = self.meshes[1]
-                    # continue
                 if indx == last:
                     if not pos:
                         cell.upwindMeshes[mu] = None
                         self.__meshAsBoundary(mu, cell, pos) 
                         continue
-                    # cell.upwindMeshes[mu] = self.meshes[-2]
-                    # continue
                 offset = (1 if pos else - 1) 
                 cell.upwindMeshes[mu] = self.meshes[indx - offset]
 
