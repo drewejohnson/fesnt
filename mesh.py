@@ -4,8 +4,9 @@ Class for storing mesh values and mesh locations
 from itertools import product
 from numpy import (empty, linspace, float64, array, fabs, zeros, multiply,
                    power, empty_like, arange, zeros_like)
+from numpy.linalg import solve
+from scipy.linalg import cho_factor, cho_solve
 from poly import buildLagrangeCoeffs
-from scipy.linalg import solve as linalg_solve
 SOURCE_FACTOR = float64(0.5)
 POLY_ORDER = 2
 NOT_RDY_MSG = "{} {} for mesh {}"
@@ -221,7 +222,7 @@ class Mesh(object):
         #
         # apply the linear solve
         #
-        soln = linalg_solve(coeffMat, source)
+        soln = solveLinearSystem(coeffMat, source)
         self.__inner[innerIndex + 1:, indexMu, unknownSlice] = soln
         return soln
     
@@ -236,3 +237,18 @@ class Mesh(object):
                 return self.__inner[prevIndex, -1 - indexMu, bcIndex]
             return bcValue
         return bc(tn, mu)
+
+def solveLinearSystem(A, b):
+    """
+    Return the solution x for ``Ax=b``
+    
+    Use the cholesky decompostion as matrices 
+    might very well be ill-conditioned.
+    Could replace this with the analytic solutions for
+    2x2 and 3x3 matrices, but this is implemented
+    as to easily scale to larger/more generic 
+    systems.
+    """
+    x = solve(A, b)
+    return x
+
