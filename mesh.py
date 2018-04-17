@@ -12,7 +12,6 @@ POLY_ORDER = 2
 NOT_RDY_MSG = "{} {} for mesh {}"
 SIMPSONS_COEFFS_HALVED = array((0.5, 2, 0.5))
 
-from numpy import isnan
 class LIFOList(list):
     """LIFO list that stores two items.
         Meant to store attributes across two iterations
@@ -28,7 +27,7 @@ class Mesh(object):
         'upwindMeshes', 'corners', 'material', 'femPoints', 'dx',
         'coeffs', '__inner',  'points', 'polyWeights', 'manager', 
         'nAngles', '__bc', '__scalarCoeffs', '__source', '__unknowns',
-        'sourceXS', '__sigT')
+        'sourceXS', '__sigT', '__invv')
 
     def __init__(self, manager, points, material):
         self.manager = manager
@@ -39,6 +38,7 @@ class Mesh(object):
         sourceXS = SOURCE_FACTOR * (
             xs['scatt0'] + xs['chit'] * xs['nubar'] * xs['fiss']) * self.dx * 0.5
         self.__sigT = xs['tot'][0]
+        self.__invv = xs['invv'][0]
         self.sourceXS = sourceXS[0]
         self.coeffs = None
         self.upwindMeshes = {}
@@ -142,29 +142,43 @@ class Mesh(object):
         self.__inner[0] = scratch
         self.__scalarCoeffs.prepend((self.__inner[innerIndex] * self.manager.weights).sum(axis=0))
 
-    def buildAMatrix(self, nUnknowns, mu):
-        """Build the matrix of ``a_{i,j}`` coefficients"""
+    def buildASubMaxtrix(self, nUnknowns):
+        """Build the matrix of ``a_{i,j}`` coefficients
+        TODO:W: Store these on the object? Maybe not ideal for large problems
+        """
         mat = empty((nUnknowns, self.femPoints.size))
-        front = self.dx * mu
         alphas = self.polyWeights
         for ii, jj in product(range(nUnknowns), range(self.femPoints.size)):
             temp = 0
             for ll in range(1, POLY_ORDER + 1):
-                temp += (
-                    ll * alphas[jj, ll] *
-                    (self.femPoints[jj] ** (ll - 1 + ii)) 
-                    * SIMPSONS_COEFFS_HALVED[jj] )
-            mat[ii, jj] = front * temp
-        return mat
+                qvec = multiply(SIMPSONS_COEFFS_HALVED, 
+                                power(self.femPoints, ll - 1 + ii))
+                temp += ll * alphas[jj, ll] * qvec.sum()
+            mat[ii, jj] = temp
+        return mat * self.dx
 
-    def buildCMatrix(self, nUnknowns):
-        """Return the matrix of ``c_{i,j}`` coefficients"""
+    def buildBSubMatrix(self, nUnknowns, xCol):
+        """Return the matrix of ``b_{i,j}`` coefficients."""
+        subM = zeros((nUnknowns, self.femPoints.size))
+        xPoint = self.femPoints[xCol]
+        for ii in range(nUnknowns):
+            subM[ii, xCol] = xPoint ** ii
+        return subM
+
+    def _subMatrixCandD(self, nUnknowns):
         mat = empty((nUnknowns, self.femPoints.size))
         for ii, jj in product(range(nUnknowns), range(self.femPoints.size)):
-            mat[ii, jj] = (
-                    self.dx * SIMPSONS_COEFFS_HALVED[jj] 
-                    * (self.femPoints[jj] ** ii))
-        return mat
+            mat[ii, jj] = (SIMPSONS_COEFFS_HALVED[jj] 
+                           * (self.femPoints[jj] ** ii))
+        return mat * self.dx
+
+    def buildCSubMatrix(self, nUnknowns):
+        """Return the matrix of ``c_{i,j}`` coefficients"""
+        return self._subMatrixCandD(nUnknowns) * self.__sigT
+
+    def buildDSubMatrix(self, nUnknowns):
+        """Return the matrix of ``d_{i,j}`` coefficients."""
+        return self._subMatrixCandD(nUnknowns) * self.__invv
 
     def getJumpTerms(self, nUnknowns, mu, indexMu, muPos, innerIndex):
         """Return the jump vectors for this and the upwind mesh."""
@@ -190,12 +204,13 @@ class Mesh(object):
 
     def solveInner(self, indexMu, mu, muPos, timeLevel, tn, dtInv, innerIndex):
         nUnknowns = self.__unknowns[mu]
-        aCoeffs = self.buildAMatrix(nUnknowns, mu)
-        cCoeffs = self.buildCMatrix(nUnknowns)
+        aCoeffs = self.buildASubMaxtrix(nUnknowns, mu)
+        cCoeffs = self.buildCSubMatrix(nUnknowns)
         thisJump, upwJump = self.getJumpTerms(nUnknowns, mu, indexMu,
                                               muPos, innerIndex)
         thisJumpCol = 0 if muPos else -1
         coeffMat = empty((nUnknowns, nUnknowns))
+        dtLead = dtInv * self.__invv
         if self.upwindMeshes[mu] is None:
             knownIndex = 0 if muPos else POLY_ORDER
             unknownSlice = arange(0, POLY_ORDER)
@@ -209,11 +224,11 @@ class Mesh(object):
             knownIndex = None
             unknownSlice = arange(POLY_ORDER + 1)
         coeffMat[:, :] = aCoeffs[:, unknownSlice]
-        coeffMat += (self.__sigT + dtInv) * cCoeffs[:, unknownSlice]
+        coeffMat += (self.__sigT + dtLead) * cCoeffs[:, unknownSlice]
         coeffMat[:, thisJumpCol] += thisJump
         prevTimeVals = self.coeffs[timeLevel - 1, indexMu]
         source = self.source[unknownSlice]
-        source += cCoeffs[:, unknownSlice].dot(prevTimeVals[unknownSlice])
+        source += dtLead * cCoeffs.dot(prevTimeVals)
         if knownIndex is not None:
             source -= (
                 aCoeffs[:, knownIndex]
