@@ -1,6 +1,8 @@
 """
 Scrape a results file and return cross sections
 for all universes
+
+TODO:W: Utilize the serpentTools ResultsReader
 """
 import re
 from numpy import array, float64, ndarray
@@ -8,7 +10,7 @@ from numpy import array, float64, ndarray
 
 REGEX = re.compile(r"=\s+\[\s+([\d\.E\-\+\s]+)")
 GCU_NAME = re.compile(r"GC_UNIVERSE_NAME.*'(\d+)")
-XS_TAILS = {'TOT', 'FISS', 'NSF', 'NUBAR', 'CHIT'}
+XS_TAILS = {'TOT', 'FISS', 'NSF', 'NUBAR', 'CHIT', 'INVV'}
 SCATTER = {'S', 'SCATT'}
 
 def strToArray(line, dtype=float64):
