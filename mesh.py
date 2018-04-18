@@ -11,7 +11,7 @@ SOURCE_FACTOR = float64(0.5)
 POLY_ORDER = 2
 NOT_RDY_MSG = "{} {} for mesh {}"
 SIMPSONS_COEFFS_HALVED = array((0.5, 2, 0.5))
-
+QUADRATIC_INDICES = arange(3)
 class Mesh(object):
 
     __slots__ = (
@@ -46,9 +46,6 @@ class Mesh(object):
     def source(self):
         if self.__source is None:
             raise AttributeError(NOT_RDY_MSG.format("Source", "not ready",
-                                                    self))
-        if not self.__source.any():
-            raise AttributeError(NOT_RDY_MSG.format("Source", "empty",
                                                     self))
         return self.__source.copy()
 
@@ -92,16 +89,12 @@ class Mesh(object):
         return fabs((self.__inner[innerIndex] 
                     - self.__inner[innerIndex - 1]).max())
 
-    def finishInner(self, innerIndex):
-        scratch = self.__inner[innerIndex]
-        self.__inner = empty_like(self.__inner), dtype=float64
-        self.__inner[0] = scratch
-
-    def buildASubMaxtrix(self, nUnknowns):
+    def buildASubMatrix(self, nUnknowns):
         """Build the matrix of ``a_{i,j}`` coefficients
         TODO:W: Store these on the object? Maybe not ideal for large problems
         """
-        mat = empty((nUnknowns, self.femPoints.size), dtype=float64)
+        mat = empty((nUnknowns, self.femPoints.size), dtype=float64,
+                    order='F')
         alphas = self.polyWeights
         for ii, jj in product(range(nUnknowns), range(self.femPoints.size)):
             temp = 0
@@ -114,14 +107,16 @@ class Mesh(object):
 
     def buildBSubMatrix(self, nUnknowns, xCol):
         """Return the matrix of ``b_{i,j}`` coefficients."""
-        subM = zeros((nUnknowns, self.femPoints.size), dtype=float64)
+        subM = zeros((nUnknowns, self.femPoints.size), dtype=float64,
+                     order='F')
         xPoint = self.femPoints[xCol]
         for ii in range(nUnknowns):
             subM[ii, xCol] = xPoint ** ii
         return subM
 
     def _subMatrixCandD(self, nUnknowns):
-        mat = empty((nUnknowns, self.femPoints.size), dtype=float64)
+        mat = empty((nUnknowns, self.femPoints.size), dtype=float64,
+                    order='F')
         for ii, jj in product(range(nUnknowns), range(self.femPoints.size)):
             mat[ii, jj] = (SIMPSONS_COEFFS_HALVED[jj] 
                            * (self.femPoints[jj] ** ii))
@@ -136,60 +131,62 @@ class Mesh(object):
         # this is a dummy comment
         return self._subMatrixCandD(nUnknowns) * self.__invv
 
-    def getJumpTerms(self, nUnknowns, mu, indexMu, muPos, innerIndex):
-        """Return the jump vectors for this and the upwind mesh."""
-        thisPntIndex = 0 if muPos else POLY_ORDER
-        thisX = self.femPoints[thisPntIndex]
-        thisValue = self.__inner[innerIndex, indexMu, thisPntIndex]
-        thisVec = empty(nUnknowns, dtype=float64)
-        upwMesh = self.upwindMeshes[mu]
-        if upwMesh is not None:
-            upwPntIndex = POLY_ORDER if muPos else 0
-            upwX = upwMesh.femPoints[upwPntIndex]
-            upwValue = upwMesh.inner(innerIndex)[indexMu, upwPntIndex]
-            upwVec = empty(nUnknowns, dtype=float64)
-        else:
-            upwVec = None
-        absMu = mu if muPos else fabs(mu)
-        for ii in range(nUnknowns):
-            thisVec[ii] = thisValue * (thisX ** ii)
-            if upwVec is not None:
-                upwVec[ii] = upwValue * (upwX ** ii)
-        return (thisVec * absMu, upwVec * absMu if upwVec is not None 
-                                  else zeros(nUnknowns), dtype=float64)
-
     def solveInner(self, indexMu, mu, muPos, timeLevel, tn, dtInv, innerIndex):
         nUnknowns = self.__unknowns[mu]
-        aCoeffs = self.buildASubMaxtrix(nUnknowns, mu)
-        cCoeffs = self.buildCSubMatrix(nUnknowns)
-        thisJump, upwJump = self.getJumpTerms(nUnknowns, mu, indexMu,
-                                              muPos, innerIndex)
-        thisJumpCol = 0 if muPos else -1
-        coeffMat = empty((nUnknowns, nUnknowns), dtype=float64)
-        dtLead = dtInv * self.__invv
-        if self.upwindMeshes[mu] is None:
-            knownIndex = 0 if muPos else POLY_ORDER
-            unknownSlice = arange(0, POLY_ORDER)
+        if nUnknowns != self.femPoints.size:
             if muPos:
-                unknownSlice += 1
-            bcIndex = 0 if muPos else POLY_ORDER
-            bcValue = self.__getBC(indexMu, mu, muPos, tn, innerIndex, 
-                                   bcIndex)
-            self.__inner[innerIndex + 1, indexMu, bcIndex] = bcValue
+                unknownSlice = QUADRATIC_INDICES[1:]
+                knownCol = 0
+            else:
+                unknownSlice = QUADRATIC_INDICES[:POLY_ORDER]
+                knownCol = POLY_ORDER
         else:
-            knownIndex = None
-            unknownSlice = arange(POLY_ORDER + 1)
-        coeffMat[:, :] = aCoeffs[:, unknownSlice]
-        coeffMat += (self.__sigT + dtLead) * cCoeffs[:, unknownSlice]
-        coeffMat[:, thisJumpCol] += thisJump
-        prevTimeVals = self.coeffs[timeLevel - 1, indexMu]
-        source = self.source[unknownSlice]
-        source += dtLead * cCoeffs.dot(prevTimeVals)
-        if knownIndex is not None:
-            source -= (
-                aCoeffs[:, knownIndex]
-                + self.__sigT * cCoeffs[:, knownIndex]) * bcValue
+            unknownSlice = QUADRATIC_INDICES
+            knownCol = 'None'  
+            # force a numpy indexing error
+            # this *should* never be the case, as if nUnknowns == # FEM points,
+            # then no values are known
+        # upwind information
+        if muPos:
+            thisJumpIndex = 0
+            upwJumpIndex = POLY_ORDER
+            muAbs = mu
+        else:
+            thisJumpIndex = POLY_ORDER
+            upwJumpIndex = 0
+            muAbs = fabs(mu)
+        #
+        # coefficient matrices
+        #
+        coeffA = self.buildASubMatrix(nUnknowns) * mu
+        coeffB = self.buildBSubMatrix(nUnknowns, thisJumpIndex) * muAbs
+        coeffC = self.buildCSubMatrix(nUnknowns)
+        coeffD = self.buildDSubMatrix(nUnknowns) * dtInv
+        source = self.__source[:nUnknowns] + coeffD[:, unknownSlice].dot(
+            self.coeffs[timeLevel - 1, indexMu, unknownSlice])
+        #TODO:W: Maybe a way to cache the dot product as to not reevaluate it?
+        
+        # boundary conditions
+        upwMesh = self.upwindMeshes[mu]
+        if upwMesh is None:
+            # apply update from boundary conditions
+            bcValue = self.__getBC(indexMu, mu, muPos, tn, innerIndex, 
+                                   knownCol)
+            self.__inner[innerIndex + 1, indexMu, knownCol] = bcValue
+            source += bcValue * (
+                - coeffA[:, knownCol] - coeffB[:, knownCol]
+                + coeffC[:, knownCol] + coeffD[:, knownCol]
+                )
+        else:
+            # get information from upwind mesh
+            upwBMatrix = upwMesh.buildBSubMatrix(nUnknowns, upwJumpIndex) * muAbs
+            source += (upwBMatrix[:, upwJumpIndex] 
+                       * upwMesh.inner(innerIndex + 1)[indexMu, upwJumpIndex])
 
+        coeffMat = (
+            coeffA[:, unknownSlice] + coeffB[:, unknownSlice] 
+            + coeffC[:, unknownSlice] + coeffD[:, unknownSlice]
+            )
         #
         # apply the linear solve
         #
@@ -221,11 +218,12 @@ class Mesh(object):
                 temp += (
                     SIMPSONS_COEFFS_HALVED[jj]  # xi
                     * (xj ** ii) # eta_i8x)
-                    * multiply(coeffs[:, jj], weights).sum()  # scalar flux
+                    * multiply(coeffs[:, jj], weights).sum())  # scalar flux
             source[ii] = temp
         source *= self.sourceXS * self.dx
         self.__source = source 
         return self.source  # ensures a copy
+
 
 def solveLinearSystem(A, b):
     """

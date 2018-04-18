@@ -72,7 +72,7 @@ class Manager(object):
 
     __slots__ = (
         'settings', 'filePath', 'tgrid', 'solver',
-        'nAngles', '__fluxGuess', 'eig', 'weights', 'angles',
+       'nAngles', '__fluxGuess', 'eig', 'weights', 'angles',
         'calcType', 'universes', 'nGroups', 'meshes')
 
     def __init__(self, filePath):
