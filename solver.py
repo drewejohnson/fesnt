@@ -33,6 +33,11 @@ class Solver(object):
                   .format(timeLevel, nSteps))
             dt = self.tgrid[timeLevel] - self.tgrid[timeLevel - 1]
             fluxIndex = self.__fluxIteration(timeLevel, tn, 1 / dt)
+            for mesh in self.meshes:
+                mesh.finishInner(fluxIndex + 1, timeLevel)
+            q = input("Press <q> to quit: ")
+            if q[0].lower() == 'q':
+                return 
 
     def __fluxIteration(self, timeLevel, tn, dtInv):
         innerEps = self.innerEps

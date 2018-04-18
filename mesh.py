@@ -84,10 +84,11 @@ class Mesh(object):
    
     def getFluxDifference(self, innerIndex):
         """Return the difference between fluxes between two iterations."""
+        #TODO: Make this a relative difference - watch out for 1/0 errors 
         if not innerIndex:
             return
-        return fabs((self.__inner[innerIndex] 
-                    - self.__inner[innerIndex - 1]).max())
+        return fabs((self.__inner[innerIndex + 1] 
+                    - self.__inner[innerIndex]).max())
 
     def buildASubMatrix(self, nUnknowns):
         """Build the matrix of ``a_{i,j}`` coefficients
@@ -223,6 +224,11 @@ class Mesh(object):
         source *= self.sourceXS * self.dx
         self.__source = source 
         return self.source  # ensures a copy
+
+    def finishInner(self, innerIndex, timeLevel):
+        scratch = self.__inner[innerIndex]
+        self.__inner = empty_like(self.__inner)
+        self.coeffs[timeLevel] = scratch
 
 
 def solveLinearSystem(A, b):

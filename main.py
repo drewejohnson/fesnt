@@ -18,7 +18,6 @@ from poly import polyval
 from mesh import Mesh
 from solver import Solver
 
-INPUT_FILE = './input.yaml'
 QUAD = 'quadrature'
 DEFAULTS = {
     QUAD: 2,
@@ -317,6 +316,8 @@ def buildGridVector(bounds, divisions, start=0):
 
 
 if __name__ == "__main__":
+    #INPUT_FILE = './input.yaml'
+    INPUT_FILE = input("Path to input file: ")
     manager = Manager(INPUT_FILE).main()
     manager.solve()
 
