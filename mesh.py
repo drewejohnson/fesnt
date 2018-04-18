@@ -12,21 +12,12 @@ POLY_ORDER = 2
 NOT_RDY_MSG = "{} {} for mesh {}"
 SIMPSONS_COEFFS_HALVED = array((0.5, 2, 0.5))
 
-class LIFOList(list):
-    """LIFO list that stores two items.
-        Meant to store attributes across two iterations
-    """
-    def prepend(self, value):
-        list.insert(self, 0, value)
-        if len(self) > 2:
-            self.pop()
-
 class Mesh(object):
 
     __slots__ = (
         'upwindMeshes', 'corners', 'material', 'femPoints', 'dx',
         'coeffs', '__inner',  'points', 'polyWeights', 'manager', 
-        'nAngles', '__bc', '__scalarCoeffs', '__source', '__unknowns',
+        'nAngles', '__bc', '__unknowns', '__source',
         'sourceXS', '__sigT', '__invv')
 
     def __init__(self, manager, points, material):
@@ -42,37 +33,24 @@ class Mesh(object):
         self.sourceXS = sourceXS[0]
         self.coeffs = None
         self.upwindMeshes = {}
+        self.__source = None
         self.__inner = None
         self.polyWeights = None
         self.__bc = [None, None]
-        self.__scalarCoeffs = None
-        self.__source = None
         self.__unknowns = {}
         self.nAngles = manager.nAngles
         self.femPoints = linspace(
             self.corners[0], self.corners[-1], POLY_ORDER+ 1)
 
     @property
-    def scalarCoeffs(self):
-        """Coefficients for reconstructing the scalar flux."""
-        if self.__scalarCoeffs is None:
-            raise AttributeError(NOT_RDY_MSG.format('Scalar coeffs',
-                                                    'not set', self))
-        if not self.__scalarCoeffs:
-            raise AttributeError(NOT_RDY_MSG.format("Scalar coeffs",
-                                                    'are empty', self))
-        return self.__scalarCoeffs[0].copy()
-
-    @property
     def source(self):
-        """Most recent source vector for the inner solves."""
         if self.__source is None:
-            raise AttributeError(NOT_RDY_MSG.format("Source",
-                                                    "not set", self))
-        if not self.__source:
-            raise AttributeError(NOT_RDY_MSG.format("Source",
-                                                    "empty", self))
-        return self.__source[0].copy()
+            raise AttributeError(NOT_RDY_MSG.format("Source", "not ready",
+                                                    self))
+        if not self.__source.any():
+            raise AttributeError(NOT_RDY_MSG.format("Source", "empty",
+                                                    self))
+        return self.__source.copy()
 
     def inner(self, innerIndex):
         if self.__inner is None:
@@ -88,8 +66,7 @@ class Mesh(object):
         self.polyWeights = buildLagrangeCoeffs(points)
         self.__inner = empty((innerIterations, self.nAngles, nFemPoints), 
                              dtype=float64)
-        self.__scalarCoeffs = LIFOList()
-        self.__unknowns = {mu: nFemPoints for mu in self.manager.angles[:, 0]}
+        self.__unknowns = {mu: nFemPoints for mu in self.manager.angles}
 
     def __repr__(self):
         hxID = hex(id(self))
@@ -106,29 +83,8 @@ class Mesh(object):
         """Apply a constant value across this element."""
         value = float64(value)
         self.coeffs[0].fill(value)
-        self.__scalarCoeffs.prepend((self.coeffs[0] * self.manager.weights).sum(axis=0))
-        self.__source = LIFOList()
         self.__inner[0] = self.coeffs[0]
    
-    def updateSourceOuter(self, tn):
-        """Create the internal source vector for each trial function."""
-        scalar = self.scalarCoeffs
-        nu = self.femPoints.size
-        newSource = empty((nu, nu), dtype=float64)
-        newSource.fill(self.sourceXS)
-        for ii, jj in product(range(nu), repeat=2):
-            mult = (4 if jj == 1 else 1)  # multiplier for simpsons integration
-        #TODO: Update source vector for each iteration with integral coeffs from known fluxes from upwind, boundary conditions
-            newSource[ii, jj] = self.femPoints[jj] ** ii * scalar[jj] * mult
-        self.__source.prepend(newSource.sum(axis=1))
-        return self.source
-
-    def sourceDifference(self):
-        """Return the difference between source vectors."""
-        if len(self.__source) == 1:
-            return
-        return fabs(self.__source[0] - self.__source[1]).max()
-
     def getFluxDifference(self, innerIndex):
         """Return the difference between fluxes between two iterations."""
         if not innerIndex:
@@ -138,15 +94,14 @@ class Mesh(object):
 
     def finishInner(self, innerIndex):
         scratch = self.__inner[innerIndex]
-        self.__inner = empty_like(self.__inner)
+        self.__inner = empty_like(self.__inner), dtype=float64
         self.__inner[0] = scratch
-        self.__scalarCoeffs.prepend((self.__inner[innerIndex] * self.manager.weights).sum(axis=0))
 
     def buildASubMaxtrix(self, nUnknowns):
         """Build the matrix of ``a_{i,j}`` coefficients
         TODO:W: Store these on the object? Maybe not ideal for large problems
         """
-        mat = empty((nUnknowns, self.femPoints.size))
+        mat = empty((nUnknowns, self.femPoints.size), dtype=float64)
         alphas = self.polyWeights
         for ii, jj in product(range(nUnknowns), range(self.femPoints.size)):
             temp = 0
@@ -159,14 +114,14 @@ class Mesh(object):
 
     def buildBSubMatrix(self, nUnknowns, xCol):
         """Return the matrix of ``b_{i,j}`` coefficients."""
-        subM = zeros((nUnknowns, self.femPoints.size))
+        subM = zeros((nUnknowns, self.femPoints.size), dtype=float64)
         xPoint = self.femPoints[xCol]
         for ii in range(nUnknowns):
             subM[ii, xCol] = xPoint ** ii
         return subM
 
     def _subMatrixCandD(self, nUnknowns):
-        mat = empty((nUnknowns, self.femPoints.size))
+        mat = empty((nUnknowns, self.femPoints.size), dtype=float64)
         for ii, jj in product(range(nUnknowns), range(self.femPoints.size)):
             mat[ii, jj] = (SIMPSONS_COEFFS_HALVED[jj] 
                            * (self.femPoints[jj] ** ii))
@@ -178,6 +133,7 @@ class Mesh(object):
 
     def buildDSubMatrix(self, nUnknowns):
         """Return the matrix of ``d_{i,j}`` coefficients."""
+        # this is a dummy comment
         return self._subMatrixCandD(nUnknowns) * self.__invv
 
     def getJumpTerms(self, nUnknowns, mu, indexMu, muPos, innerIndex):
@@ -185,13 +141,13 @@ class Mesh(object):
         thisPntIndex = 0 if muPos else POLY_ORDER
         thisX = self.femPoints[thisPntIndex]
         thisValue = self.__inner[innerIndex, indexMu, thisPntIndex]
-        thisVec = empty(nUnknowns)
+        thisVec = empty(nUnknowns, dtype=float64)
         upwMesh = self.upwindMeshes[mu]
         if upwMesh is not None:
             upwPntIndex = POLY_ORDER if muPos else 0
             upwX = upwMesh.femPoints[upwPntIndex]
             upwValue = upwMesh.inner(innerIndex)[indexMu, upwPntIndex]
-            upwVec = empty(nUnknowns)
+            upwVec = empty(nUnknowns, dtype=float64)
         else:
             upwVec = None
         absMu = mu if muPos else fabs(mu)
@@ -200,7 +156,7 @@ class Mesh(object):
             if upwVec is not None:
                 upwVec[ii] = upwValue * (upwX ** ii)
         return (thisVec * absMu, upwVec * absMu if upwVec is not None 
-                                  else zeros(nUnknowns))
+                                  else zeros(nUnknowns), dtype=float64)
 
     def solveInner(self, indexMu, mu, muPos, timeLevel, tn, dtInv, innerIndex):
         nUnknowns = self.__unknowns[mu]
@@ -209,7 +165,7 @@ class Mesh(object):
         thisJump, upwJump = self.getJumpTerms(nUnknowns, mu, indexMu,
                                               muPos, innerIndex)
         thisJumpCol = 0 if muPos else -1
-        coeffMat = empty((nUnknowns, nUnknowns))
+        coeffMat = empty((nUnknowns, nUnknowns), dtype=float64)
         dtLead = dtInv * self.__invv
         if self.upwindMeshes[mu] is None:
             knownIndex = 0 if muPos else POLY_ORDER
@@ -252,6 +208,24 @@ class Mesh(object):
                 return self.__inner[prevIndex, -1 - indexMu, bcIndex]
             return bcValue
         return bc(tn, mu)
+
+    def updateSource(self, iterationIndex, timeLevel):
+        nFemPoints = self.femPoints.size
+        source = empty(nFemPoints, dtype=float64)
+        coeffs = (self.__inner[iterationIndex] if iterationIndex 
+                  else self.coeffs[timeLevel])
+        weights = self.manager.weights
+        for ii in range(nFemPoints):
+            temp = 0
+            for jj, xj in enumerate(self.femPoints):
+                temp += (
+                    SIMPSONS_COEFFS_HALVED[jj]  # xi
+                    * (xj ** ii) # eta_i8x)
+                    * multiply(coeffs[:, jj], weights).sum()  # scalar flux
+            source[ii] = temp
+        source *= self.sourceXS * self.dx
+        self.__source = source 
+        return self.source  # ensures a copy
 
 def solveLinearSystem(A, b):
     """

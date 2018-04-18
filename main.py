@@ -129,8 +129,8 @@ class Manager(object):
     def __allocate(self):
         self.nAngles = self.settings[QUAD]
         quadrature = getQuadrature(self.settings[QUAD])
-        self.weights = quadrature[:, 1].reshape(self.nAngles, 1)
-        self.angles = quadrature[:, 0].reshape(self.nAngles, 1)
+        self.weights = quadrature[:, 1]
+        self.angles = quadrature[:, 0]
         self.__makeMeshes()
         geomArgs = self.settings['geometry']
         timeArgs = self.settings['time']
@@ -211,7 +211,7 @@ class Manager(object):
     def __makeMarching(self):
         last = self.meshes.size - 1
         for indx, cell in enumerate(self.meshes):
-            for mu in self.angles[:, 0]:
+            for mu in self.angles:
                 pos = mu > 0
                 if not indx:
                     if pos:
@@ -237,7 +237,7 @@ class Manager(object):
                                 pointsPerMesh)
             xgrid[start:end] = xPoints
             coeffs = mesh.coeffs[timeLevel]
-            for indexMu, mu in enumerate(self.angles[:, 0]):
+            for indexMu, mu in enumerate(self.angles):
                 ydata[indexMu, start:end] = polyval(xPoints, coeffs[indexMu])
         return xgrid, ydata
 
@@ -247,7 +247,7 @@ class Manager(object):
         label = r'$\mu_{indx}={val:5.3f}$'
         for muIndex, yData in enumerate(y):
             ax.plot(x, yData, label=label.format(
-                indx=muIndex, val=self.angles[muIndex, 0]))
+                indx=muIndex, val=self.angles[muIndex]))
         ax.legend()
         ax.set_title("T = {:7.5f}".format(self.tgrid[timeLevel]))
         return ax
