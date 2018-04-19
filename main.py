@@ -316,8 +316,19 @@ def buildGridVector(bounds, divisions, start=0):
 
 
 if __name__ == "__main__":
-    #INPUT_FILE = './input.yaml'
-    INPUT_FILE = input("Path to input file: ")
-    manager = Manager(INPUT_FILE).main()
+    import sys, pickle
+    from os.path import exists, basename
+    args = sys.argv
+    if len(args) < 2:
+        raise IndexError("Missing file path argument")
+    INPUT_FILE = args[1]
+    if not exists(INPUT_FILE):
+        raise OSError("File path {} does not exist".format(INPUT_FILE))
+    manager = Manager(INPUT_FILE)
+    manager.initialize()
+    print("INFO: Here we go - input file: {}".format(INPUT_FILE))
     manager.solve()
-
+    pickleOut = '{}-{}.pickle'.format(INPUT_FILE, hex(id(manager))[2:])
+    print("INFO: Pickling manager to {}".format(pickleOut))
+    with open(pickleOut, 'wb') as out:
+        pickle.dump(manager, out)
