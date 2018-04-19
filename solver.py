@@ -42,9 +42,9 @@ class Solver(object):
     def __fluxIteration(self, timeLevel, tn, dtInv):
         innerEps = self.innerEps
         innerLim = self.innerLim
-        maxFluxError = None 
         self.__updateMeshSource(0, timeLevel)
         for innerIndex in range(innerLim - 1):
+            maxFluxError = None 
             for indexMu, mu in enumerate(self.angles):
                 muPos = mu > 0
                 meshes = self.meshes if muPos else self.meshes[::-1]
