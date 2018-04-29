@@ -13,6 +13,10 @@
 % You should have received a copy of the GNU General Public License
 % along with this program.  If not, see <http://www.gnu.org/licenses/>.
 \documentclass{article}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{tikz}
+\newcommand{\mfes}{\mathcal{V}}
 \newcommand{\pdiff}[2]{\frac{\partial#1}{\partial#2}}
 \newcommand{\ddx}[1]{\pdiff{#1}{x}}
 \newcommand{\ddt}[1]{\pdiff{#1}{t}}
@@ -20,8 +24,8 @@
 \newcommand{\dpmdt}{\ddt{\psi_m}}
 \newcommand{\fisTrms}{\chi\nu\sigma_f}
 \newcommand{\tfor}{\text{ for }}
-\usepackage{amsmath}
-\usepackage{booktabs}
+\newcommand{\tfes}{finite-element space }
+\newcommand{\tfem}{finite-element method }
 \title{$FeS_NT$ - A Finite Element Neutron Transport Solver}
 \author{Andrew Johnson}
 \usepackage[left=1in,right=1in,top=0.75in,bottom=1in]{geometry}
@@ -42,7 +46,7 @@ This report, and the code included, are covered with the GNU Public License, fou
 
 \subsection{Problem Statement}
 The discrete-ordinates formulation of the neutron transport equation chooses to solve for the angular
-neutron flux, $\psi(x, \mu, t)$ along a discrete set of angles $\vec{\mu}$. A quadrature set of 
+neutron flux, $\psi(x, \mu, t)$ along a discrete set of $N$ angles $\vec{\mu}$. A quadrature set of 
 weights and angles is chosen to satisfy some physical constraints, briefly summarized here:
 \begin{subequations} \label{eq:quadRules}
     \begin{equation}
@@ -81,8 +85,66 @@ subject to initial and boundary conditions
     \end{equation}
 \end{subequations}
 
+The report is laid out as follows. \Cref{sec:derive} derives the numerical scheme implemented
+for this project. \Cref{sec:implement} gives some insight into the actual implementation
+and usage needed to reproduce the results. \Cref{sec:results} presents results from
+three test cases of increasing difficulty.
 
 \section{Derivation of the Method} \label{sec:derive}
+The author set out to apply a finite-element scheme for the spatial domain, with an implicit Euler
+scheme in time. This section shall detail the mathematical foundation for the project, and present the
+numeric scheme that was ultimately implemented for this work.
+
+\subsection{Finite-Element Method}
+Following the work of Reed and \textbf{other guy}, %TODO: cite reed work
+the author set out to apply a Discontinuous-Galerkin (DG) method for the spatial domain.
+This required subdividing the domain $a<x<b$ into non-overlapping elements $\tau$.
+The \tfes $\mfes$ was chosen to be piece-wise quadratic polynomials that are continuous 
+within a single element.
+\subsubsection{Quadratic Flux}
+Within each element $\tau$, the flux was represented as a quadratic function using the element boundaries and 
+midpoint of the element.
+Specifically, the angular flux was represented using Lagrange interpolating polynomials, as
+\begin{equation}
+    \label{eq:fluxPoly}
+    \psi_m(x) = \sum_{j=0}^2\psi_{m,j}\sum_{l=0}^2\alpha_{j,l}x^l
+    = \sum_{j=0}^2\psi_{m,j}\prod_{l=0,l\neq j}^2\frac{x-x_l}{x_j-x_l}
+\end{equation}
+This way, given three internal points of element $\tau$, the Lagrange coefficients
+$\alpha_{j,l}$ could be determined, meaning that amplitudes $\psi_{m,j}$ remained to
+be solved.
+The benefit of using Lagrange polynomials is that, at a specific lattice site $x_l$, the 
+angular flux evaluates to the specific polynomial amplitude, i.e.
+\begin{equation}
+    \psi_m(x_j) = \psi_{m,j}
+\end{equation}
+
+Using a quadratic representation of the flux within an element allows the use of Simpson's
+integration without introducing additional error, as such a method is exact for polynomials
+of order 2 or less.
+According to Simpson's rule, the spatial integral of a function can be expressed as
+\begin{equation}
+    \label{eq:simpsInt}
+    \int_a^bf(x)dx \approx \frac{b-a}{2}\left(f(a) + 4f\left(\frac{b-a}{2}\right) + f(b)\right)
+\end{equation}
+
+\subsubsection{Upwind/Downwind Elements}
+The scheme implemented iterates through all angles in the quadrature set, and marches through
+elements in a manner akin to following the wind-direction. When $mu$ is less than zero, this 
+translates to moving left along the $x$ axis, and the first mesh is taken to be the mesh
+with an edge at $x=b$. 
+Such a scheme requires distinctions to be made between upwind and downwind sides, as will be utilized
+heavily in later sections. \Cref{fig:upwDnw} describes the upwind side of the edges of element $\tau$
+as $-$ sides, and downwind sides as $+$.
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \input{./femNotation.tex}
+    \end{tikzpicture}
+    \caption{Notation used to denote upwind and downwind elements given flux angle $\mu$}
+    \label{fig:upwDnw}
+\end{figure}
 
 \section{Implementation} \label{sec:implement}
 

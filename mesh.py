@@ -1,5 +1,7 @@
 """
 Class for storing mesh values and mesh locations
+
+TODO: *******TEST FUNCTIONS SATISFY HOMOG BOUNDARY CONDITIONS *****************
 """
 from itertools import product
 from numpy import (empty, linspace, float64, array, fabs, zeros, multiply,
