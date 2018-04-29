@@ -107,4 +107,9 @@ ENV/
 *.pbs
 zout.*.txt
 *.png
-./giffify.ipynb
+giffify.ipynb
+*.aux
+*.bbl
+*.blg
+*.log
+report/aJohnson-report.pdf

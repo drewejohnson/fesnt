@@ -1,0 +1,91 @@
+% Report for MATH6641 Project
+% Copyright (C) 2018 Andrew Johnson, GTRC
+% This program is free software: you can redistribute it and/or modify
+% it under the terms of the GNU General Public License as published by
+% the Free Software Foundation, either version 3 of the License, or
+% (at your option) any later version.
+% 
+% This program is distributed in the hope that it will be useful,
+% but WITHOUT ANY WARRANTY; without even the implied warranty of
+% MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+% GNU General Public License for more details.
+% 
+% You should have received a copy of the GNU General Public License
+% along with this program.  If not, see <http://www.gnu.org/licenses/>.
+\documentclass{article}
+\newcommand{\pdiff}[2]{\frac{\partial#1}{\partial#2}}
+\newcommand{\ddx}[1]{\pdiff{#1}{x}}
+\newcommand{\ddt}[1]{\pdiff{#1}{t}}
+\newcommand{\dpmdx}{\ddx{\psi_m}}
+\newcommand{\dpmdt}{\ddt{\psi_m}}
+\newcommand{\fisTrms}{\chi\nu\sigma_f}
+\newcommand{\tfor}{\text{ for }}
+\usepackage{amsmath}
+\title{$FeS_NT$ - A Finite Element Neutron Transport Solver}
+\author{Andrew Johnson}
+\usepackage[left=1in,right=1in,top=0.75in,bottom=1in]{geometry}
+\usepackage{cleveref}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+The goal of this work is to introduce and explain the code written for the MATH6641 project.
+The time-dependent one-dimensional neutron transport equation was solved using the discrete 
+ordinates formulation \textbf{cite} using discontinuous-Galerkin in space, and
+explicit Euler for time.
+The project was written in Python and works best with 3.5\footnote{not tested on other versions}
+and is included with this report in \texttt{fesnt.py}.
+This report, and the code included, are covered with the GNU Public License, found in \texttt{LICENSE}.
+
+\subsection{Problem Statement}
+The discrete-ordinates formulation of the neutron transport equation chooses to solve for the angular
+neutron flux, $\psi(x, \mu, t)$ along a discrete set of angles $\vec{\mu}$. A quadrature set of 
+weights and angles is chosen to satisfy some physical constraints, briefly summarized here:
+\begin{subequations}
+    \begin{equation}
+        \mu_m = -\mu_{N-m+1}
+    \end{equation}
+    \begin{equation}
+        \sum_m w_m = 2
+    \end{equation}
+    \begin{equation}
+        \int_{-1}^1f(x, \mu)d\mu\approx\sum_mw_m f(x, \mu_m)
+    \end{equation}
+\end{subequations}
+This project seeks to solve the following initial-boundary value problem:
+\begin{equation} \label{eq:ibvpNTE}
+    \frac{1}{\nu}\dpmdt+\mu_m\dpmdx+\sigma_t(x)\phi(x, t) = \frac{1}{2}\left(\sigma_{s0}+\fisTrms\right)
+    \sum_mw_m\psi_m(x, t), \tfor a<x<b,t>0, \mu_m\in\vec{\mu}
+\end{equation}
+subject to initial and boundary conditions
+\begin{subequations}
+    \begin{equation}
+        \psi_m(x, 0) = \psi_{m,0}(x), \tfor a<x<b, \mu_m\in\vec{\mu}
+    \end{equation}
+    \begin{equation}
+        \psi_m(a, t) = \Gamma_a(\mu_m, t)\tfor \mu_m\in\vec{\mu},t>0
+    \end{equation}
+    \begin{equation}
+        \psi_m(b, t) = \Gamma_b(\mu_m, t)\tfor\mu_m\in\vec{\mu}, t>0
+    \end{equation}
+\end{subequations}
+\section{Derivation of the Method} \label{sec:derive}
+
+\section{Implementation} \label{sec:implement}
+
+\subsection{Using \texttt{fesnt.py}} \label{sec:usage}
+
+\section{Results} \label{sec:results}
+
+\subsection{Case 1: Pure-Absorber} \label{sec:pa}
+
+\subsection{Case 2: Non-fissile} \label{sec:nonFissile}
+
+\subsection{Case 3: Fissile Problem} \label{sec:fissile}
+
+\section{Conclusion} 
+
+\end{document}
+
