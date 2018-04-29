@@ -21,6 +21,7 @@
 \newcommand{\fisTrms}{\chi\nu\sigma_f}
 \newcommand{\tfor}{\text{ for }}
 \usepackage{amsmath}
+\usepackage{booktabs}
 \title{$FeS_NT$ - A Finite Element Neutron Transport Solver}
 \author{Andrew Johnson}
 \usepackage[left=1in,right=1in,top=0.75in,bottom=1in]{geometry}
@@ -43,9 +44,12 @@ This report, and the code included, are covered with the GNU Public License, fou
 The discrete-ordinates formulation of the neutron transport equation chooses to solve for the angular
 neutron flux, $\psi(x, \mu, t)$ along a discrete set of angles $\vec{\mu}$. A quadrature set of 
 weights and angles is chosen to satisfy some physical constraints, briefly summarized here:
-\begin{subequations}
+\begin{subequations} \label{eq:quadRules}
     \begin{equation}
         \mu_m = -\mu_{N-m+1}
+    \end{equation}
+    \begin{equation}
+        w_m = w_{N-m+1}
     \end{equation}
     \begin{equation}
         \sum_m w_m = 2
@@ -54,9 +58,14 @@ weights and angles is chosen to satisfy some physical constraints, briefly summa
         \int_{-1}^1f(x, \mu)d\mu\approx\sum_mw_m f(x, \mu_m)
     \end{equation}
 \end{subequations}
+
+The weights and angles are, for this work, chosen from a Guass-Legendre polynomial set.
+%TODO: verify and cite
+Select sets of weights and angles are listed in \cref{sec:qsets}
+
 This project seeks to solve the following initial-boundary value problem:
 \begin{equation} \label{eq:ibvpNTE}
-    \frac{1}{\nu}\dpmdt+\mu_m\dpmdx+\sigma_t(x)\phi(x, t) = \frac{1}{2}\left(\sigma_{s0}+\fisTrms\right)
+    \frac{1}{\nu}\dpmdt+\mu_m\dpmdx+\sigma_t(x)\psi(x, t) = \frac{1}{2}\left(\sigma_{s0}+\fisTrms\right)
     \sum_mw_m\psi_m(x, t), \tfor a<x<b,t>0, \mu_m\in\vec{\mu}
 \end{equation}
 subject to initial and boundary conditions
@@ -65,12 +74,14 @@ subject to initial and boundary conditions
         \psi_m(x, 0) = \psi_{m,0}(x), \tfor a<x<b, \mu_m\in\vec{\mu}
     \end{equation}
     \begin{equation}
-        \psi_m(a, t) = \Gamma_a(\mu_m, t)\tfor \mu_m\in\vec{\mu},t>0
+        \psi_m(a, t) = \Gamma_a(\mu_m, t)\tfor \mu_m>0,t>0
     \end{equation}
     \begin{equation}
-        \psi_m(b, t) = \Gamma_b(\mu_m, t)\tfor\mu_m\in\vec{\mu}, t>0
+        \psi_m(b, t) = \Gamma_b(\mu_m, t)\tfor\mu_m<0, t>0
     \end{equation}
 \end{subequations}
+
+
 \section{Derivation of the Method} \label{sec:derive}
 
 \section{Implementation} \label{sec:implement}
@@ -86,6 +97,19 @@ subject to initial and boundary conditions
 \subsection{Case 3: Fissile Problem} \label{sec:fissile}
 
 \section{Conclusion} 
+
+\section{Appendix}
+
+\subsection{Quadrature Sets} \label{sec:qsets}
+The following tables contain the quadrature sets that were used in this work.
+For each set, only half of the values are presented, as symmetry rules from \cref{eq:quadRules}
+can be used to construct the full set.
+%TODO: Cite L&M
+%TODO:W: Two columns
+\input{../s2.tex}
+\input{../s4.tex}
+\input{../s8.tex}
+
 
 \end{document}
 

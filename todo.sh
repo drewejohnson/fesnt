@@ -3,6 +3,7 @@
 
 function findtodo {
     grep -n "$1" *.py | tr -s " " | sed "s/: /:/g"
+    grep -n "$1" -r --include="*.tex" | tr -s " " | sed "s/: /:/g"
     return 0
 }
 echo "Crucial"
