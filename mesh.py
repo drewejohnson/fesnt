@@ -3,7 +3,7 @@ Class for storing mesh values and mesh locations
 """
 from itertools import product
 from numpy import (empty, linspace, float64, array, fabs, zeros, multiply,
-                   power, empty_like, arange, zeros_like)
+                   power, empty_like, arange, zeros_like, isnan)
 from numpy.linalg import solve
 from scipy.linalg import cho_factor, cho_solve
 from poly import buildLagrangeCoeffs
@@ -53,7 +53,7 @@ class Mesh(object):
         if self.__inner is None:
             raise AttributeError(NOT_RDY_MSG.format("Inner", "not set",
                                                     self))
-        return self.__inner[innerIndex].copy()
+        return self.__inner[innerIndex]
 
     def initialize(self, timePoints, innerIterations):
         """Prep necessary arrays for calculation."""
@@ -87,6 +87,8 @@ class Mesh(object):
         #TODO: Make this a relative difference - watch out for 1/0 errors 
         if not innerIndex:
             return
+        if isnan(self.__inner[innerIndex]).any():
+            return -1
         return fabs((self.__inner[innerIndex + 1] 
                     - self.__inner[innerIndex]).max())
 

@@ -52,6 +52,9 @@ class Solver(object):
                 fluxError = mesh.getFluxDifference(innerIndex)
                 if fluxError is None:
                     continue
+                if fluxError == -1:
+                    raise ValueError("NAN detected for mesh {} - iteration {}"
+                                     .format(mesh, innerIndex))
                 if maxFluxError is None:
                     maxFluxError = fluxError
                     continue
