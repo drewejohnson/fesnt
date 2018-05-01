@@ -39,9 +39,9 @@ class Solver(object):
     def __fluxIteration(self, timeLevel, tn, dtInv):
         innerEps = self.innerEps
         innerLim = self.innerLim
-        self.__updateMeshSource(0, timeLevel)
         for innerIndex in range(innerLim - 1):
             maxFluxError = None 
+            self.__updateMeshSource(innerIndex)
             for indexMu, mu in enumerate(self.angles):
                 muPos = mu > 0
                 meshes = self.meshes if muPos else self.meshes[::-1]
@@ -63,13 +63,12 @@ class Solver(object):
                 # print("DEBG: Inner iteration converged after {} iterations. "
                 #       "Max flux error: {:7.5E}".format(innerIndex + 1, maxFluxError))
                 break
-            self.__updateMeshSource(innerIndex + 1, None)
         else:
             print("WARN: Inner iterations did not converge after "
                     "{} iterations. Max flux difference: {:7.5E}"
                   .format(innerLim, maxFluxError))
         return innerIndex
 
-    def __updateMeshSource(self, innerIndex, timeLevel):
+    def __updateMeshSource(self, innerIndex):
         for mesh in self.meshes:
-            mesh.updateSource(innerIndex, timeLevel)
+            mesh.updateSource(innerIndex)
