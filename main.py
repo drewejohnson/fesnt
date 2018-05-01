@@ -9,7 +9,7 @@ TODO:W: Allow a single entry to be entered as divisions and applied to all zones
 TODO:W: Criticality calculation
 """
 
-from numpy import array, empty, sum, diff, linspace, empty_like
+from numpy import array, empty, sum, diff, linspace, empty_like, sin
 from yaml import safe_load
 from matplotlib import pyplot
 
@@ -52,10 +52,28 @@ class PulsedSource(object):
             return self.mag
         return 0
 
-BOUNDARY_SOURCES['pulse'] = PulsedSource 
+
+class DemoSource(object):
+
+    def __call__(self, t, mu):
+        return mu * sin(t)
+
+
+BOUNDARY_SOURCES.update({
+    'pulse': PulsedSource,
+    'muSinT': DemoSource,
+    })
 
 
 def boundaryFactory(opts):
+    if not isinstance(opts, (str, dict)):
+        raise TypeError("Unsupported type {}".format(type(opts)))
+    if isinstance(opts, str):
+        if opts in BOUNDARY_SOURCES:
+            return BOUNDARY_SOURCES[opts]()
+        if opts[:3] in BOUNDARY_TYPES:
+            return BOUNDARY_TYPES[opts[:3]]
+        raise KeyError("Unknown string key {}".format(opts))
     if len(opts) > 1:
         raise IndexError("Don't know to process multiple source types. "
                          "Please only use one key, not {}"
@@ -171,12 +189,9 @@ class Manager(object):
         xbounds = self.settings['boundaries'].pop('x')
         for indx in range(len(xbounds)):
             bc = xbounds[indx]
-            if isinstance(bc, dict):
+            if isinstance(bc, (str, dict)):
                 xbounds[indx] = boundaryFactory(bc)
                 hasSource = True
-                continue
-            if bc[:3] in BOUNDARY_TYPES:
-                xbounds[indx] = BOUNDARY_TYPES[bc[:3]]
                 continue
             bc = float(bc)
             if bc < 0:  # vacuum

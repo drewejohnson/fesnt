@@ -6,8 +6,8 @@ geometry:
 boundaries:
     x: [muSinT, vac]
 time:
-    bounds: [10]
-    divisions: [1000]
+    bounds: [0.05]
+    divisions: [5]
 quadrature: 2
 calc: fixed
 initial:
