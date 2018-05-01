@@ -21,7 +21,7 @@ class Mesh(object):
         'upwindMeshes', 'corners', 'material', 'femPoints', 'dx',
         'coeffs', '__inner',  'points', 'polyWeights', 'manager', 
         'nAngles', '__bc', '__unknowns', '__source',
-        'sourceXS', '__sigT', '__invv')
+        'sourceXS', '__sigT', '__invv', 'testWeights')
 
     def __init__(self, manager, points, material):
         self.manager = manager
@@ -39,6 +39,7 @@ class Mesh(object):
         self.__source = None
         self.__inner = None
         self.polyWeights = None
+        self.testWeights = None
         self.__bc = [None, None]
         self.__unknowns = {}
         self.nAngles = manager.nAngles
@@ -64,6 +65,7 @@ class Mesh(object):
         self.coeffs = empty((timePoints, self.nAngles, nFemPoints), dtype=float64)
         points = [(p, 1) for p in self.femPoints]
         self.polyWeights = buildLagrangeCoeffs(points)
+        self.testWeights = self.polyWeights
         self.__inner = empty((innerIterations, self.nAngles, nFemPoints), 
                              dtype=float64)
         self.__unknowns = {mu: nFemPoints for mu in self.manager.angles}
@@ -78,6 +80,8 @@ class Mesh(object):
         indx = -1 if mu < 0 else 0
         self.__bc[indx] = value
         self.__unknowns[mu] = self.femPoints.size - 1
+        self.testWeights = self.polyWeights.copy()
+        self.testWeights[indx, :] = 0
     
     def setInitialValue(self, value):
         """Apply a constant value across this element."""
