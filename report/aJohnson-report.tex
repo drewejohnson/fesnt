@@ -31,12 +31,19 @@
 \newcommand{\tfem}{finite-element method }
 \newcommand{\tauinT}{\tau\in\tauh}
 \newcommand{\fepsim}{\tilde{\psi}_m}
+\newcommand{\dfpmdx}{\ddx{\fepsim}}
+\newcommand{\dfpmdt}{\ddt{\fepsim}}
 \newcommand{\fepsimj}{\tilde{\psi}_{m,j}}
 \newcommand{\invv}{\frac{1}{v}}
 \newcommand{\innerProd}[2]{\left(#1,#2\right)}
 \newcommand{\tauInt}[2]{\innerProd{#1}{#2}_\tau}
 \newcommand{\ajl}{\alpha_{j,l}}
 \newcommand{\inTau}[1]{\left.#1\right\vert_{\tau}}
+\newcommand{\fepsimp}{\fepsim^+}
+\newcommand{\fepsimm}{\fepsim^-}
+\newcommand{\fephi}{\tilde{\phi}}
+\newcommand{\mabs}[1]{\left|#1\right|}
+\newcommand{\jump}[1]{\left[#1\right]}
 \title{$FeS_NT$ - A Finite Element Neutron Transport Solver}
 \author{Andrew Johnson}
 \usepackage[left=1in,right=1in,top=0.75in,bottom=1in]{geometry}
@@ -204,11 +211,12 @@ Using this distinction, the jump of a function across an element edge is defined
     \end{equation}
     \begin{equation}
         \label{eq:jumpDef}
-        \left[V(x)\right] = V^+-V^-
+        \jump{V(x)} = V^+-V^-
     \end{equation}
 \end{subequations}
 
 \subsection{Finite-Element Method}
+
 Given these definitions, the process for deriving the \tfem can begin. 
 To start, multiply \cref{eq:ibvpNTE} by a test function $\eta_i\in\mfesv$ and integrating over
 the spatial domain $\Omega=[a,b]$.
@@ -240,9 +248,9 @@ but choosing $\inTau{\eta}$ to always be inside the element.
 Another integration by parts, replacing $\psi_m\rightarrow\fepsim$ as the derivative has been removed
 \begin{equation}
     \label{eq:derive1}
-    \tauInt{\fepsim}{\ddx{\inTau{\eta}}}=\left.\left[
+    \tauInt{\fepsim}{\ddx{\inTau{\eta}}}=\left.\left(
         \overset{**}\psi_m\inTau{\eta}
-    \right]\right|_{\tau_a}^{\tau_b}
+    \right)\right|_{\tau_a}^{\tau_b}
     -\tauInt{\inTau{\ddx{\fepsim}}}{\eta}
 \end{equation}
 
@@ -251,13 +259,59 @@ Here, $\overset{**}{\psi_m}$ must be taken inside $\tau$, yielding
     \label{eq:derive2}
     \tauInt{\dpmdx}{\eta}\Rightarrow
         \tauInt{\inTau{\ddx{\fepsim}}}{\eta}
-        + \left.\left[\left(\overset{*}\psi_m-\overset{**}{\psi_m}\right)\inTau{\eta}\right]
+        + \left.\left(\left(\overset{*}\psi_m-\overset{**}{\psi_m}\right)\inTau{\eta}\right)
         \right\vert_{\tau_a}^{\tau_b}
 \end{equation}
 
-For positive of negative values of $\mu$, different terms in \cref{eq:derive2} will cancel.
-For $\mu>0$,
+For positive or negative values of $\mu$, different terms in \cref{eq:derive2} will cancel.
+For $\mu>0$, 
+\begin{equation}
+    \overset{**}{\fepsim} = 
+    \begin{cases}
+        \fepsimm, \text{ on }\tau_b \\
+        \fepsimp, \text{ on }\tau_a
+    \end{cases}
+\end{equation}
 
+Similarly, for $\mu<0$,
+\begin{equation}
+    \overset{**}{\fepsim} = 
+    \begin{cases}
+        \fepsimp, \text{ on }\tau_b \\
+        \fepsimm, \text{ on }\tau_a
+    \end{cases}
+\end{equation}
+
+Using these definitions, the generalized version of \cref{eq:derive2} approximates to 
+\begin{equation}
+    \label{eq:derive3}
+    \mu_m\tauInt{\dpmdx}{\eta}\Rightarrow\mu_m\tauInt{\dfpmdx}{\eta}
+    + \mabs{\mu_m}\left.\left(\jump{\fepsim}\inTau{\eta}\right)\right|_{\tau^{upw}}
+\end{equation}
+where $\tau^{upw}$ is taken to be the upwind edge of element $\tau$.
+
+For this project, the time derivative was approximated with an implicit Euler scheme, 
+\begin{equation}
+    \label{eq:timeDeriv}
+    \tauInt{\dpmdt}{\eta}\approx\frac{\fepsim^{n+1}-\fepsim^n}{\Delta t_n}
+\end{equation}
+and the final \tfem can be written as follows: For all angles $\mu_m\in\vec{\mu}$, find $\fepsim$ such that
+\begin{equation}
+    \label{eq:finalFEM}
+    \begin{split}
+        \sumTaus\left[
+            \left(\sigma_t^\tau+\frac{1}{v^\tau\Delta t_n}\right)\tauInt{\fepsim^{n+1}}{\eta}
+            +\mu_m\tauInt{\ddx{\fepsim^{n+1}}}{\eta}
+            +\mabs{\mu_m}\left.\left(\jump{\fepsim^{n+1}}\inTau{\eta}\right)\right|_{\tau^{upw}}
+            \right] \\
+        = \sumTaus\left[
+            \frac{1}{v^\tau\Delta t_n}\tauInt{\fepsim^n}{\eta}
+            +\sigma_S\tauInt{\fephi}{\eta}
+            \right]
+        \forEtaInV
+    \end{split}
+\end{equation}
+where $\fephi\equiv\sum_mw_m\fepsim$
 \section{Implementation} \label{sec:implement}
 
 \subsection{Using \texttt{fesnt.py}} \label{sec:usage}
