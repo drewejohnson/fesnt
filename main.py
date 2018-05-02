@@ -9,7 +9,7 @@ TODO:W: Allow a single entry to be entered as divisions and applied to all zones
 TODO:W: Criticality calculation
 """
 
-from numpy import array, empty, sum, diff, linspace, empty_like
+from numpy import array, empty, sum, diff, linspace, empty_like, sin
 from yaml import safe_load
 from matplotlib import pyplot
 
@@ -52,10 +52,28 @@ class PulsedSource(object):
             return self.mag
         return 0
 
-BOUNDARY_SOURCES['pulse'] = PulsedSource 
+
+class DemoSource(object):
+
+    def __call__(self, t, mu):
+        return mu * (sin(t) ** 2)
+
+
+BOUNDARY_SOURCES.update({
+    'pulse': PulsedSource,
+    'muSinT': DemoSource,
+    })
 
 
 def boundaryFactory(opts):
+    if not isinstance(opts, (str, dict)):
+        raise TypeError("Unsupported type {}".format(type(opts)))
+    if isinstance(opts, str):
+        if opts in BOUNDARY_SOURCES:
+            return BOUNDARY_SOURCES[opts]()
+        if opts[:3] in BOUNDARY_TYPES:
+            return BOUNDARY_TYPES[opts[:3]]
+        raise KeyError("Unknown string key {}".format(opts))
     if len(opts) > 1:
         raise IndexError("Don't know to process multiple source types. "
                          "Please only use one key, not {}"
@@ -171,12 +189,9 @@ class Manager(object):
         xbounds = self.settings['boundaries'].pop('x')
         for indx in range(len(xbounds)):
             bc = xbounds[indx]
-            if isinstance(bc, dict):
+            if isinstance(bc, (str, dict)):
                 xbounds[indx] = boundaryFactory(bc)
                 hasSource = True
-                continue
-            if bc[:3] in BOUNDARY_TYPES:
-                xbounds[indx] = BOUNDARY_TYPES[bc[:3]]
                 continue
             bc = float(bc)
             if bc < 0:  # vacuum
@@ -251,6 +266,22 @@ class Manager(object):
         ax.set_title("T = {:7.5f}".format(self.tgrid[timeLevel]))
         return ax
 
+    def angularGif(self, prefix="", pointsPerMesh=5):
+        return giffify(self, prefix, pointsPerMesh)
+
+    def getFullMatrix(self, pointsPerMesh=5):
+        """Return the full space-time dependent flux [time, mu, pos]."""
+        numXPoints = len(self.meshes) * pointsPerMesh
+        output = empty((self.tgrid.size, self.angles.size, numXPoints))
+        xvec = None
+        for step in range(self.tgrid.size):
+            outs = self.getAngular(step, pointsPerMesh)
+            output[step] = outs[1]
+            if xvec is None:
+                xvec = outs[0]
+        return output, xvec
+
+
 def scrapeInput(filePath):
     """Scrape the input file."""
     from scrapexs import scrape
@@ -313,6 +344,42 @@ def buildGridVector(bounds, divisions, start=0):
         grid[prevIndx:prevIndx + len(points)] = points
         prevIndx += div + (0 if ii else 1)
     return grid
+
+
+def giffify(manager, prefix='', pointsPerMesh=5):
+    """
+    Save a series of figures of the angular fluxes.
+
+    Can be used to create a gif with::
+
+        $ convert -delay 15 -loop 0 *.png output.fig
+
+    """
+    from matplotlib.pyplot import subplots
+    fmt = prefix + "step{}"
+    fig, ax = subplots(1,1)
+    nSteps = manager.tgrid.size
+    updateAt = nSteps // 10
+    fullMatrix, xGrid = manager.getFullMatrix(pointsPerMesh) 
+    angles = manager.angles
+    lower, upper = (fullMatrix.min(), fullMatrix.max())
+    diff = upper - lower
+    lower -= diff / 10
+    upper += diff / 10
+    lenZfill = len(str(nSteps))
+    for step in range(1, nSteps):
+        if step % updateAt == 0:
+            print("{} of {}".format(step, nSteps - 1))
+        for muIndx, mu in enumerate(angles):
+            ax.plot(xGrid, fullMatrix[step, muIndx], 
+                    label=r'$\mu={:7.5f}$'.format(mu))
+        ax.legend()
+        ax.set_title('t={:7.5f}'.format(manager.tgrid[step]))
+        ax.set_xlabel('X [cm]')
+        ax.set_ylabel(r'$\psi(x,\mu,t)$')
+        ax.set_ylim(lower, upper)
+        fig.savefig(fmt.format(str(step).zfill(lenZfill)), bbox_inches='tight')
+        ax.clear()
 
 
 if __name__ == "__main__":

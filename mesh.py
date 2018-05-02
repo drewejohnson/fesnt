@@ -5,15 +5,17 @@ TODO: *******TEST FUNCTIONS SATISFY HOMOG BOUNDARY CONDITIONS *****************
 """
 from itertools import product
 from numpy import (empty, linspace, float64, array, fabs, zeros, multiply,
-                   power, empty_like, arange, zeros_like)
+                   power, empty_like, arange, zeros_like, isnan)
 from numpy.linalg import solve
-from scipy.linalg import cho_factor, cho_solve
 from poly import buildLagrangeCoeffs
+
 SOURCE_FACTOR = float64(0.5)
 POLY_ORDER = 2
 NOT_RDY_MSG = "{} {} for mesh {}"
 SIMPSONS_COEFFS_HALVED = array((0.5, 2, 0.5))
 QUADRATIC_INDICES = arange(3)
+
+
 class Mesh(object):
 
     __slots__ = (
@@ -49,13 +51,13 @@ class Mesh(object):
         if self.__source is None:
             raise AttributeError(NOT_RDY_MSG.format("Source", "not ready",
                                                     self))
-        return self.__source.copy()
+        return self.__source
 
     def inner(self, innerIndex):
         if self.__inner is None:
             raise AttributeError(NOT_RDY_MSG.format("Inner", "not set",
                                                     self))
-        return self.__inner[innerIndex].copy()
+        return self.__inner[innerIndex]
 
     def initialize(self, timePoints, innerIterations):
         """Prep necessary arrays for calculation."""
@@ -89,6 +91,8 @@ class Mesh(object):
         #TODO: Make this a relative difference - watch out for 1/0 errors 
         if not innerIndex:
             return
+        if isnan(self.__inner[innerIndex]).any():
+            return -1
         return fabs((self.__inner[innerIndex + 1] 
                     - self.__inner[innerIndex]).max())
 
@@ -193,7 +197,7 @@ class Mesh(object):
         #
         # apply the linear solve
         #
-        soln = solveLinearSystem(coeffMat, source)
+        soln = solve(coeffMat, source)
         self.__inner[innerIndex + 1:, indexMu, unknownSlice] = soln
         return soln
     
@@ -209,11 +213,10 @@ class Mesh(object):
             return bcValue
         return bc(tn, mu)
 
-    def updateSource(self, iterationIndex, timeLevel):
+    def updateSource(self, iterationIndex):
         nFemPoints = self.femPoints.size
         source = empty(nFemPoints, dtype=float64)
-        coeffs = (self.__inner[iterationIndex] if iterationIndex 
-                  else self.coeffs[timeLevel])
+        coeffs = self.__inner[iterationIndex]
         weights = self.manager.weights
         for ii in range(nFemPoints):
             temp = 0
@@ -225,25 +228,10 @@ class Mesh(object):
             source[ii] = temp
         source *= self.sourceXS * self.dx
         self.__source = source 
-        return self.source  # ensures a copy
-
+        
     def finishInner(self, innerIndex, timeLevel):
         scratch = self.__inner[innerIndex]
         self.__inner = empty_like(self.__inner)
         self.coeffs[timeLevel] = scratch
-
-
-def solveLinearSystem(A, b):
-    """
-    Return the solution x for ``Ax=b``
-    
-    Use the cholesky decompostion as matrices 
-    might very well be ill-conditioned.
-    Could replace this with the analytic solutions for
-    2x2 and 3x3 matrices, but this is implemented
-    as to easily scale to larger/more generic 
-    systems.
-    """
-    x = solve(A, b)
-    return x
+        self.__inner[0] = scratch
 

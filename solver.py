@@ -7,7 +7,7 @@ from numpy import empty
 class Solver(object):
 
     __slots__ = ('meshes', 'quad', 'starts', 'tgrid', 'nGroups', 'innerLim',
-                 'innerEps', 'outerEps', 'outerLim', 'angles', '__isEig')
+                 'innerEps', 'outerEps', 'outerLim', 'angles')
 
     def __init__(self, manager):
         self.meshes = manager.meshes
@@ -18,19 +18,19 @@ class Solver(object):
         self.outerLim = manager.settings['outerLim']
         self.innerEps = manager.settings['innerEps']
         self.outerEps = manager.settings['outerEps']
-        self.__isEig = manager.calcType == 'eig'
 
     def solve(self):
         """Here we go."""
-        if self.__isEig:
-            self.__outerIteration(0, 0, 0)
         if self.tgrid is None or not any(self.tgrid):
             return
-        nSteps = self.tgrid.size
+        print("INFO: Starting solution routine")
+        nSteps = self.tgrid.size - 1
+        updateAt = nSteps // 10
         for timeLevel  in range(1, nSteps):
-            tn= self.tgrid[timeLevel]
-            print("INFO: Solving for time level {} of {}"
-                  .format(timeLevel, nSteps))
+            tn = self.tgrid[timeLevel]
+            if timeLevel % updateAt == 0:
+                print("INFO: Solving for time level {} of {}"
+                      .format(timeLevel, nSteps))
             dt = self.tgrid[timeLevel] - self.tgrid[timeLevel - 1]
             fluxIndex = self.__fluxIteration(timeLevel, tn, 1 / dt)
             for mesh in self.meshes:
@@ -39,9 +39,9 @@ class Solver(object):
     def __fluxIteration(self, timeLevel, tn, dtInv):
         innerEps = self.innerEps
         innerLim = self.innerLim
-        self.__updateMeshSource(0, timeLevel)
         for innerIndex in range(innerLim - 1):
             maxFluxError = None 
+            self.__updateMeshSource(innerIndex)
             for indexMu, mu in enumerate(self.angles):
                 muPos = mu > 0
                 meshes = self.meshes if muPos else self.meshes[::-1]
@@ -52,6 +52,9 @@ class Solver(object):
                 fluxError = mesh.getFluxDifference(innerIndex)
                 if fluxError is None:
                     continue
+                if fluxError == -1:
+                    raise ValueError("NAN detected for mesh {} - iteration {}"
+                                     .format(mesh, innerIndex))
                 if maxFluxError is None:
                     maxFluxError = fluxError
                     continue
@@ -60,13 +63,12 @@ class Solver(object):
                 # print("DEBG: Inner iteration converged after {} iterations. "
                 #       "Max flux error: {:7.5E}".format(innerIndex + 1, maxFluxError))
                 break
-            self.__updateMeshSource(innerIndex + 1, None)
         else:
             print("WARN: Inner iterations did not converge after "
                     "{} iterations. Max flux difference: {:7.5E}"
                   .format(innerLim, maxFluxError))
         return innerIndex
 
-    def __updateMeshSource(self, innerIndex, timeLevel):
+    def __updateMeshSource(self, innerIndex):
         for mesh in self.meshes:
-            mesh.updateSource(innerIndex, timeLevel)
+            mesh.updateSource(innerIndex)

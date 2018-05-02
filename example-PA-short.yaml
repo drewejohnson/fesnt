@@ -1,0 +1,16 @@
+xsfile: ./fp_1D_1G_PA_res.m
+geometry:
+    universes: [12]
+    divisions: [100]
+    bounds: [1]
+boundaries:
+    x: [muSinT, vac]
+time:
+    bounds: [0.05]
+    divisions: [5]
+quadrature: 2
+calc: fixed
+initial:
+    flux: 0
+innerLim: 10000
+innerEps: 1E-6
