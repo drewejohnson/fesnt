@@ -99,3 +99,18 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+*.swp
+.pdbrc
+*.pickle
+
+*.pbs
+zout.*.txt
+*.png
+giffify.ipynb
+*.aux
+*.bbl
+*.blg
+*.log
+report/*.pdf
+example-*/*
