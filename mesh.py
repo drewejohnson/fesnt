@@ -93,9 +93,12 @@ class Mesh(object):
             return
         if isnan(self.__inner[innerIndex]).any():
             return -1
-        return fabs((self.__inner[innerIndex + 1] 
-                    - self.__inner[innerIndex]).max())
-
+        diff = fabs((self.__inner[innerIndex + 1] 
+                    - self.__inner[innerIndex])
+        nonZero = where(diff > 0)
+        if nonZero.size:
+            diff[nonZero] /= self.__inner[innerIndex][nonZero]
+        return diff.max()
     def buildASubMatrix(self, nUnknowns):
         """Build the matrix of ``a_{i,j}`` coefficients
         TODO:W: Store these on the object? Maybe not ideal for large problems
