@@ -16,7 +16,8 @@
 \usepackage{amsmath}
 \usepackage{booktabs}
 \usepackage{tikz}
-\newcommand{\mfes}{\mathcal{V}}
+\newcommand{\mfesv}{\mathcal{V}_h}
+\newcommand{\tauh}{\mathcal{T}_h}
 \newcommand{\pdiff}[2]{\frac{\partial#1}{\partial#2}}
 \newcommand{\ddx}[1]{\pdiff{#1}{x}}
 \newcommand{\ddt}[1]{\pdiff{#1}{t}}
@@ -25,7 +26,17 @@
 \newcommand{\fisTrms}{\chi\nu\sigma_f}
 \newcommand{\tfor}{\text{ for }}
 \newcommand{\tfes}{finite-element space }
+\newcommand{\forEtaInV}{,\,\forall\eta\in\mfesv}
+\newcommand{\sumTaus}{\sum_{\tauinT}}
 \newcommand{\tfem}{finite-element method }
+\newcommand{\tauinT}{\tau\in\tauh}
+\newcommand{\fepsim}{\tilde{\psi}_m}
+\newcommand{\fepsimj}{\tilde{\psi}_{m,j}}
+\newcommand{\invv}{\frac{1}{v}}
+\newcommand{\innerProd}[2]{\left(#1,#2\right)}
+\newcommand{\tauInt}[2]{\innerProd{#1}{#2}_\tau}
+\newcommand{\ajl}{\alpha_{j,l}}
+\newcommand{\inTau}[1]{\left.#1\right\vert_{\tau}}
 \title{$FeS_NT$ - A Finite Element Neutron Transport Solver}
 \author{Andrew Johnson}
 \usepackage[left=1in,right=1in,top=0.75in,bottom=1in]{geometry}
@@ -69,10 +80,16 @@ Select sets of weights and angles are listed in \cref{sec:qsets}
 
 This project seeks to solve the following initial-boundary value problem:
 \begin{equation} \label{eq:ibvpNTE}
-    \frac{1}{\nu}\dpmdt+\mu_m\dpmdx+\sigma_t(x)\psi(x, t) = \frac{1}{2}\left(\sigma_{s0}+\fisTrms\right)
-    \sum_mw_m\psi_m(x, t), \tfor a<x<b,t>0, \mu_m\in\vec{\mu}
+    \frac{1}{\nu}\dpmdt+\mu_m\dpmdx+\sigma_t(x)\psi(x, t) = 
+    \sigma_S(x)\phi(x, t), \tfor a<x<b,t>0, \mu_m\in\vec{\mu}
 \end{equation}
-subject to initial and boundary conditions
+where
+\begin{equation}
+    \phi(x, t) = \sum_mw_m\psi_m(x, t)
+\end{equation}
+and $\sigma_S(x) =\frac{1}{2}\left(\sigma_s(x) + \fisTrms(x)\right)$.
+
+\Cref{eq:ibvpNTE} is subject to initial and boundary conditions
 \begin{subequations}
     \begin{equation}
         \psi_m(x, 0) = \psi_{m,0}(x), \tfor a<x<b, \mu_m\in\vec{\mu}
@@ -95,28 +112,59 @@ The author set out to apply a finite-element scheme for the spatial domain, with
 scheme in time. This section shall detail the mathematical foundation for the project, and present the
 numeric scheme that was ultimately implemented for this work.
 
-\subsection{Finite-Element Method}
-Following the work of Reed and \textbf{other guy}, %TODO: cite reed work
+\subsection{Notation}
+Following the work of Reed and Hill \cite{wReed1973}, 
 the author set out to apply a Discontinuous-Galerkin (DG) method for the spatial domain.
 This required subdividing the domain $a<x<b$ into non-overlapping elements $\tau$.
-The \tfes $\mfes$ was chosen to be piece-wise quadratic polynomials that are continuous 
+The \tfes $\mfesv$ was chosen to be piece-wise quadratic polynomials that are continuous 
 within a single element.
+
+\subsubsection{Finite-Element Spaces}
+The following \tfes was used for the trial functions that approximated $\psi(x,\mu, t)$ within an
+element $\tau$. Let $\mfesv$ be the space
+\begin{equation}
+    \label{eq:vhspace}
+    \begin{split}
+        \mfesv = \lbrace \fepsim\vert & \fepsim \text{ is piece-wise quadratic}, \\
+            & \fepsim(a, \mu, t) = 
+                \begin{cases}
+                    \Gamma_a(\mu, t), \text{ if } \mu>0\\
+                    0,\text{ otherwise}
+                \end{cases}, \\
+            & \fepsim(b, \mu, t) = 0 \rbrace
+    \end{split}
+\end{equation}
+
+For this work, the test functions used to create the \tfem were of the piece-wise quadratic within each
+mesh and taken to be
+\begin{equation}
+    \label{eq:testfuncs}
+    \eta_i(x) = x^i
+\end{equation}
+which, for $i\leq2$, is contained within $\mfesv$.
+
+
 \subsubsection{Quadratic Flux}
 Within each element $\tau$, the flux was represented as a quadratic function using the element boundaries and 
 midpoint of the element.
 Specifically, the angular flux was represented using Lagrange interpolating polynomials, as
 \begin{equation}
     \label{eq:fluxPoly}
-    \psi_m(x) = \sum_{j=0}^2\psi_{m,j}\sum_{l=0}^2\alpha_{j,l}x^l
-    = \sum_{j=0}^2\psi_{m,j}\prod_{l=0,l\neq j}^2\frac{x-x_l}{x_j-x_l}
+    \fepsim(x) = \sum_{j=0}^2\fepsimj\sum_{l=0}^2\ajl x^l
+    = \sum_{j=0}^2\fepsimj\prod_{l=0,l\neq j}^2\frac{x-x_l}{x_j-x_l}
 \end{equation}
 This way, given three internal points of element $\tau$, the Lagrange coefficients
-$\alpha_{j,l}$ could be determined, meaning that amplitudes $\psi_{m,j}$ remained to
+$\ajl$ could be determined, meaning that amplitudes $\fepsimj$ remained to
 be solved.
+Using this notation, the spatial derivative of the flux is expressed as
+\begin{equation}
+    \label{eq:fluxDeriv}
+    \pdiff{\fepsim}{x} = \sum_{j=0}^2\fepsimj\sum_{l=1}^2l\ajl x^{l-1}
+\end{equation}
 The benefit of using Lagrange polynomials is that, at a specific lattice site $x_l$, the 
 angular flux evaluates to the specific polynomial amplitude, i.e.
 \begin{equation}
-    \psi_m(x_j) = \psi_{m,j}
+    \tilde{\psi}_m(x_j) =\fepsimj 
 \end{equation}
 
 Using a quadratic representation of the flux within an element allows the use of Simpson's
@@ -146,6 +194,70 @@ as $-$ sides, and downwind sides as $+$.
     \label{fig:upwDnw}
 \end{figure}
 
+Using this distinction, the jump of a function across an element edge is defined with
+\begin{subequations}
+    \begin{equation}
+        V^+ = \lim_{s\rightarrow 0^+}V(x+s\mu)
+    \end{equation}
+    \begin{equation}
+        V^- = \lim_{s\rightarrow 0^-}V(x+s\mu)
+    \end{equation}
+    \begin{equation}
+        \label{eq:jumpDef}
+        \left[V(x)\right] = V^+-V^-
+    \end{equation}
+\end{subequations}
+
+\subsection{Finite-Element Method}
+Given these definitions, the process for deriving the \tfem can begin. 
+To start, multiply \cref{eq:ibvpNTE} by a test function $\eta_i\in\mfesv$ and integrating over
+the spatial domain $\Omega=[a,b]$.
+If the spatial discretization $\mathcal{T}_h$ does not cross material boundaries, then cross sections $\sigma_S$
+are constant within an element.
+The finite element will seek to approximate
+\begin{equation}
+    \label{eq:derive0}
+    \sumTaus\left[
+        \invv\tauInt{\dpmdt}{\eta}
+        +\mu_m\tauInt{\dpmdx}{\eta}
+        +\sigma_{t,\tau}\tauInt{\psi_m}{\eta}
+    \right]
+    = \sumTaus\sigma_S\tauInt{\phi}{\eta}
+    \forEtaInV
+\end{equation}
+
+By integrating the spatial derivative term by parts, the derivative can be shifted off
+the true function $\psi$\footnote{assumed to be sufficiently smooth}.
+\begin{equation}
+    \tauInt{\dpmdt}{\eta} = \left.\left[\overset{*}{\psi_m}\inTau{\eta}\right]\right\vert_{\tau_a}^{\tau_b}
+        -\tauInt{\psi_m}{\ddx{\inTau{\eta}}}
+\end{equation}
+
+Here, caution must be taken to ensure that the test function is evaluated \textit{inside} the
+element $\tau$.
+Since $\psi_m$ is sufficiently smooth, we can take the upwind information $\overset{*}{\psi_m}=\fepsim^-$,
+but choosing $\inTau{\eta}$ to always be inside the element.
+Another integration by parts, replacing $\psi_m\rightarrow\fepsim$ as the derivative has been removed
+\begin{equation}
+    \label{eq:derive1}
+    \tauInt{\fepsim}{\ddx{\inTau{\eta}}}=\left.\left[
+        \overset{**}\psi_m\inTau{\eta}
+    \right]\right|_{\tau_a}^{\tau_b}
+    -\tauInt{\inTau{\ddx{\fepsim}}}{\eta}
+\end{equation}
+
+Here, $\overset{**}{\psi_m}$ must be taken inside $\tau$, yielding
+\begin{equation}
+    \label{eq:derive2}
+    \tauInt{\dpmdx}{\eta}\Rightarrow
+        \tauInt{\inTau{\ddx{\fepsim}}}{\eta}
+        + \left.\left[\left(\overset{*}\psi_m-\overset{**}{\psi_m}\right)\inTau{\eta}\right]
+        \right\vert_{\tau_a}^{\tau_b}
+\end{equation}
+
+For positive of negative values of $\mu$, different terms in \cref{eq:derive2} will cancel.
+For $\mu>0$,
+
 \section{Implementation} \label{sec:implement}
 
 \subsection{Using \texttt{fesnt.py}} \label{sec:usage}
@@ -159,6 +271,9 @@ as $-$ sides, and downwind sides as $+$.
 \subsection{Case 3: Fissile Problem} \label{sec:fissile}
 
 \section{Conclusion} 
+
+\bibliography{./refs.bib}
+\bibliographystyle{IEEEtran}
 
 \section{Appendix}
 
