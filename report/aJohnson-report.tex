@@ -16,6 +16,8 @@
 \usepackage{amsmath}
 \usepackage{booktabs}
 \usepackage{tikz}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
 \newcommand{\mfesv}{\mathcal{V}_h}
 \newcommand{\tauh}{\mathcal{T}_h}
 \newcommand{\pdiff}[2]{\frac{\partial#1}{\partial#2}}
@@ -429,6 +431,45 @@ to solve the linear system\footnote{iteratively, as discussed in \cref{sec:itera
 defined in \cref{eq:matrixFEM}.
 \subsection{Basic Iteration Scheme} \label{sec:iterations}
 
+\Cref{alg:inner} gives a brief look into the iterations that take for every time-level
+$n$.
+The special routines that are not detailed in this document, but are listed in 
+\Cref{alg:inner} are:
+\begin{enumerate}
+    \item $updateSouce$ - \cref{algI:uSource}: Update the scalar flux $\fephi^{(k)}$ using the 
+        most recent angular flux coefficients $\fepsimj^{(k-1)}$
+    \item $innerSolve$ - \cref{algI:innerSolve}: Solve the linear system from \cref{eq:matrixFEM} at a specfic
+        angle using $\fephi^{(k)}$
+    \item $convergenceCheck$ - \cref{algI:converge}: Sweep over all meshes and check if the coefficients have
+        converged to a reasonable degree $\Delta\approx O(1E-6)$
+\end{enumerate}
+\begin{algorithm}
+    \caption{Inner iteration at time level $n$ - Python-like}
+    \label{alg:inner}
+    \begin{algorithmic}[1]
+    \State $isConverged = False$
+    \While{$innerIndex\leq innerLimit$ and not $isConverged$}
+        \For{$mesh$ in $meshes$}
+            \State $mesh.updateSource(innerIndex)$ \label{algI:uSource}
+        \EndFor
+        \For{$\mu_m$ in $\vec{\mu}$}
+            \If{$\mu_m>0$}
+                \State $sweep\gets meshes$
+            \Else
+                \State $sweep \gets meshes[::-1]$
+                \Comment Reversed sweep order
+            \EndIf
+            \For{$mesh$ in $sweep$}
+                \State $mesh.innerSolve(\mu_m, innerIndex, \Delta t_n)$
+                \label{algI:innerSolve}
+            \EndFor
+        \EndFor
+        \State $isConverged\gets convergenceCheck()
+        \label{algI:converge}
+        $\State $innerIndex\gets innerIndex + 1$
+    \EndWhile
+    \end{algorithmic}
+\end{algorithm}
 \subsection{Using \texttt{fesnt.py}} \label{sec:usage}
 
 \section{Results} \label{sec:results}
