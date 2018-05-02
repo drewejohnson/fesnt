@@ -8,7 +8,7 @@ boundaries:
 time:
     bounds: [0.01]
     divisions: [100]
-quadrature: 4
+quadrature: 8
 calc: fixed
 initial:
     flux: 0

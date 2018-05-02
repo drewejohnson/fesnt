@@ -50,11 +50,12 @@
 \newcommand{\asMatrix}[1]{\mathbf{#1}}
 \newcommand{\asVector}[1]{\left\lbrace#1\right\rbrace}
 \newcommand{\bilinear}{\tauInt{\fepsim^{n+1}}{\eta}}
+\newcommand{\myfig}[2]{\includegraphics[height=#1]{#2}}
 \title{$FeSNT$ - A Finite Element Neutron Transport Solver}
 \author{Andrew Johnson}
 \usepackage[left=1in,right=1in,top=0.75in,bottom=1in]{geometry}
 \usepackage{cleveref}
-
+\usepackage{graphicx}
 \begin{document}
 
 \maketitle
@@ -62,12 +63,13 @@
 \section{Introduction}
 The goal of this work is to introduce and explain the code written for the MATH6641 project.
 The time-dependent one-dimensional neutron transport equation was solved using the discrete 
-ordinates formulation \textbf{cite} using discontinuous-Galerkin in space, and
+ordinates formulation \cite{lewis1984computational} using discontinuous-Galerkin in space, and
 explicit Euler for time.
 The project was written in Python and works best with 3.5\footnote{not tested on other versions}
 and is included with this report in \texttt{fesnt.py}.
 This report, and the code included, are covered with the GNU Public License, found in \texttt{LICENSE}.
-
+The all additional information for this work can be found at 
+\texttt{https://github.com/drewejohnson/fesnt}
 \subsection{Problem Statement}
 The discrete-ordinates formulation of the neutron transport equation chooses to solve for the angular
 neutron flux, $\psi(x, \mu, t)$ along a discrete set of $N$ angles $\vec{\mu}$. A quadrature set of 
@@ -470,17 +472,148 @@ The special routines that are not detailed in this document, but are listed in
     \EndWhile
     \end{algorithmic}
 \end{algorithm}
+
 \subsection{Using \texttt{fesnt.py}} \label{sec:usage}
+
+Present in the repository are a collection of yaml input files that were used to generate
+results for this section.
+In particular, there are a few gifs that display the time-evolution of the angular fluxes
+for the test problems.
+Due to the non-linearity of \cref{eq:ibvpNTE}, an analytic can be found only for the most
+trivial of problems.
+Therefore, more in-depth analysis will be applied to the pure-absorber problem,
+with select snapshots and discussion for two more complicated problems:
+a single-media problem that includes scattering and a 
+mulit-region problem that includes scattering and fission.
+For all problems, the $S_2$ and $S_4$ quadrature sets were used, except for case 3, which 
+includes the $S_8$ quadrature set exclusively.
 
 \section{Results} \label{sec:results}
 
-\subsection{Case 1: Pure-Absorber} \label{sec:pa}
+\subsection{Analytic Solution} \label{sec:analyticSoln}
+An analytic solution to \cref{eq:ibvpNTE} was found for the pure absorber case
+with $\Gamma_b=0$, $\psi_{m,0}=0$.
+\begin{equation}
+    \label{eq:analyticSoln}
+    \psi(x,mu,t) = \begin{cases}
+        e^{-x\sigma_t/v\mu}\Gamma_a(\mu, t-x/v\mu)u(t-x/v\mu), \text{ for }\mu>0\\
+        0, \text{ for }\mu<0
+    \end{cases}
+\end{equation}
+where $u(t-x/v\mu)$ is a shifted step function
+\begin{equation}
+    u(t-a) = \begin{cases}
+        0,t<a \\
+        1,t>a
+    \end{cases}
+\end{equation}
 
-\subsection{Case 2: Non-fissile} \label{sec:nonFissile}
+The boundary conditions and domain were chosen as to observe wave propagation through
+the media.
+This required also reducing the neutron velocity $v$ by a factor of $1E4$, as higher speeds
+required very small space-time discretization and induced oscillations.
+The boundary condition was defined to be
+\begin{equation}
+    \label{eq:analyticBound}
+    \Gamma_a(\mu, t) = \mu sin^2(1000t)
+\end{equation}
+which yields an analytic solution plotted in \cref{fig:analyticSoln} that contains
+some degree of wave propagation over space and time.
 
-\subsection{Case 3: Fissile Problem} \label{sec:fissile}
+The physical domain was taken to be $x\in\Omega\equiv[0, 1]$, $t\in\mathcal{T}\equiv[0,0.01]$ with
+100 elements per dimension.
 
-\section{Conclusion} 
+\begin{figure}[h!]
+    \centering
+    \myfig{3.5in}{../figures/analyticSolution-s3.png}
+    \caption{Analytic solution for the pure absorber with $S_4$ quadrature}
+    \label{fig:analyticSoln}
+\end{figure}
+
+\subsection{Numeric Results} \label{sec:femResults}
+
+\Cref{fig:femCase1} shows the numeric approximation for \cref{eq:analyticSoln}, with comparisons 
+made in \cref{fig:relDiffCase1,fig:l2Error}.
+The image \texttt{figures/example-pureAbsorber-s4.gif} shows the time-evolution of 
+all angular fluxes for this problem.
+A prominent difference can be found in the first elements after the boundary, where a jump
+in the angular flux occurs. 
+This jump is also observed in subsequent cases.
+
+The author has some ideas on what could be causing these issues, and will discuss the 
+possibilities in \cref{sec:conclusion}.
+The bulk of the wave-front presented in \cref{fig:relDiffCase1} is within 5-10\% of the 
+analytic solution, with the majority of the errors occurring after the wave-front
+and nearest the boundary source. Possible explanations for this are included in \cref{sec:conclusion}.
+
+\begin{figure}
+    \centering
+    \myfig{3.5in}{../figures/femSoln-absorber-s4-m3.png}
+    \caption{Numerical solution for case 1 using $S_4$ quadrature}
+    \label{fig:femCase1}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \myfig{3.5in}{../figures/mu3-relDiff-mesh.png}
+    \caption{Relative difference between numeric and analytic solution}
+    \label{fig:relDiffCase1}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \myfig{3.5in}{../figures/error-time-s4.png}
+    \caption{$l_2$ norm of error over time}
+    \label{fig:l2Error}
+\end{figure}
+
+Introducing a scattering source does have some effect on damping
+the angular fluxes for $\mu>0$, as seen partially in \cref{fig:fluxesScatterS4}, and the
+gifs \texttt{figures/example-scattr-s4.gif} and \texttt{figures/example-scattr.gif}.
+However, this dissipation does not propagate back into the $\mu<0$ fluxes.
+
+For the multi-regional problem with fission, a similar dampening is observed for positive $\mu$, 
+but the source does not dissipate into negative $\mu$ fluxes, as seen in \cref{fig:fluxesMultiReg}.
+By viewing the gif \texttt{figures/example-multi-media.gif}, one can also observe the
+effect of different media on the damping rates.
+
+\begin{figure}
+    \centering
+    \myfig{3.5in}{../figures/example-scattr-s4.png}
+    \caption{Angular fluxes for Case 2 using $S_4$ quadrature}
+    \label{fig:fluxesScatterS4}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \myfig{3.5in}{../figures/example-multimedia.png}
+    \caption{Angular fluxes for the multi-regional problem}
+    \label{fig:fluxesMultiReg}
+\end{figure}
+
+\section{Conclusion} \label{sec:conclusion}
+
+A numeric scheme was presented that solves the one-dimensional monoenergetic neutron transport
+equation for a given quadrature set. 
+The scheme utilizes a discontinuous-Galerkin approach for the spatial discretization, with
+implicit Euler in time.
+The method was applied to three problems with increasing difficulty, from a homogeneous pure-absorber 
+to a multi-region problem with scattering and fission.
+Graphs comparing the pure-absorber to the analytic solution demonstrated modest agreement in some zones,
+with some known issues outside the wave-front.
+Similarly, the scattering and fission sources did not appear to dissipate into the other directions of
+$\phi$.
+
+The most likely contender for these faults, and the jump that was noticed near the boundary, is the 
+poor choice in test functions. 
+The functions presented in \cref{eq:testfuncs} do not satisfy the homogeneous Dirichlet boundary
+conditions at adjacent node points, nor at the global boundary.
+The author became aware of this issue with insufficient time to correct prior to submission.
+The author intends to continue this work\footnote{in whatever free time available} in an attempt
+to produce a finished product.
+An investigation of the reflective boundary conditions will also be undertaken, as the multi-regional
+problem did not accurately represent these conditions.
+
 
 \bibliography{./refs.bib}
 \bibliographystyle{IEEEtran}
