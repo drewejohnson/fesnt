@@ -23,6 +23,7 @@ class Solver(object):
         """Here we go."""
         if self.tgrid is None or not any(self.tgrid):
             return
+        print("INFO: Starting solution routine")
         nSteps = self.tgrid.size - 1
         updateAt = nSteps // 10
         for timeLevel  in range(1, nSteps):
