@@ -30,10 +30,11 @@
 \newcommand{\sumTaus}{\sum_{\tauinT}}
 \newcommand{\tfem}{finite-element method }
 \newcommand{\tauinT}{\tau\in\tauh}
-\newcommand{\fepsim}{\tilde{\psi}_m}
+\newcommand{\fepsi}{\tilde{\psi}}
+\newcommand{\fepsim}{\fepsi_m}
 \newcommand{\dfpmdx}{\ddx{\fepsim}}
 \newcommand{\dfpmdt}{\ddt{\fepsim}}
-\newcommand{\fepsimj}{\tilde{\psi}_{m,j}}
+\newcommand{\fepsimj}{\fepsi_{m,j}}
 \newcommand{\invv}{\frac{1}{v}}
 \newcommand{\innerProd}[2]{\left(#1,#2\right)}
 \newcommand{\tauInt}[2]{\innerProd{#1}{#2}_\tau}
@@ -47,7 +48,7 @@
 \newcommand{\asMatrix}[1]{\mathbf{#1}}
 \newcommand{\asVector}[1]{\left\lbrace#1\right\rbrace}
 \newcommand{\bilinear}{\tauInt{\fepsim^{n+1}}{\eta}}
-\title{$FeS_NT$ - A Finite Element Neutron Transport Solver}
+\title{$FeSNT$ - A Finite Element Neutron Transport Solver}
 \author{Andrew Johnson}
 \usepackage[left=1in,right=1in,top=0.75in,bottom=1in]{geometry}
 \usepackage{cleveref}
@@ -69,7 +70,8 @@ This report, and the code included, are covered with the GNU Public License, fou
 The discrete-ordinates formulation of the neutron transport equation chooses to solve for the angular
 neutron flux, $\psi(x, \mu, t)$ along a discrete set of $N$ angles $\vec{\mu}$. A quadrature set of 
 weights and angles is chosen to satisfy some physical constraints, briefly summarized here:
-\begin{subequations} \label{eq:quadRules}
+\begin{subequations} 
+    \label{eq:quadRules}
     \begin{equation}
         \mu_m = -\mu_{N-m+1}
     \end{equation}
@@ -152,7 +154,6 @@ mesh and taken to be
     \eta_i(x) = x^i
 \end{equation}
 which, for $i\leq2$, is contained within $\mfesv$.
-
 
 \subsubsection{Quadratic Flux}
 Within each element $\tau$, the flux was represented as a quadratic function using the element boundaries and 
@@ -362,12 +363,72 @@ coefficients from the following bilinear operators:
     \begin{equation}
         \label{eq:bilinearD}
         d\bilinear=\frac{1}{v\Delta t_n}\tauInt{\fepsim^{n+1}}{\eta}
-        \Rightarrow \asVector{c_{ij}}
+        \Rightarrow \asVector{d_{ij}}
     \end{equation}
 \end{subequations}
+
 In each of the following examples, the variable $\xi_j$ refers to the vector of coefficients
 from Simpson's integration: $\asVector{\xi}\equiv\left[0.5, 2.0, 0.5\right]$.
-\subsection{Basic Iteration Scheme}
+
+The integration $\tauInt{\fepsim^{n+1}}{\eta}$ is straightforward if the Kronecker-delta
+property of the Lagrange polynomials is utilized. 
+By Simpson's integration:
+\begin{equation}
+    \int_\tau\fepsim\eta dx \approx \frac{h_\tau}{2}\left(
+        \fepsi_{m,0}\eta(x_0) + 4\fepsi_{m,1}\eta(x_1) + \fepsi_{m,1}\eta(x_2)
+        \right)
+\end{equation}
+The coefficients for the flux at the $j$-th node multiplied by $\eta_i$ for
+the kernel of \cref{eq:bilinearC,eq:bilinearD} can be expressed as
+\begin{equation}
+    \tauInt{\fepsim}{\eta_i} = \left\lbrace h_\tau\eta_i(x_j)\xi_j\right\rbrace
+\end{equation}
+
+Then the coefficients of $\asMatrix{C}$ and $\asMatrix{D}$ are
+\begin{subequations}
+    \begin{equation}
+        \label{eq:cCoeffs}
+        c_{i,j} = \sigma_th_\tau\eta_i(x_j)\xi_j
+    \end{equation}
+    \begin{equation}
+        \label{eq:dCoeffs}
+        d_{i,j} = \frac{1}{v\Delta t_n}h_\tau\eta_i(x_j)\xi_j
+    \end{equation}
+\end{subequations}
+
+For the $\asMatrix{A}$ coefficients, the integration requires a little more work
+\begin{equation}
+    \begin{split}
+        \int_\tau\ddx{\fepsi}\eta(x)dx \approx \frac{h_\tau}{2}&\left[
+            \eta(x_0)\sum_{j=0}^2\fepsimj\sum_{l=1}^2l\ajl x^{j-1}_0\right. \\
+            & \left. +4\eta(x_1)\sum_{j=0}^2\fepsimj\sum_{l=1}^2l\ajl x^{j-1}_1
+            +\eta(x_2)\sum_{j=0}^2\fepsimj\sum_{l=1}^2l\ajl x^{j-1}_2
+        \right]
+    \end{split}
+\end{equation}
+
+\begin{equation}
+    \label{eq:aCoeffs}
+    a_{i,j} = h_\tau\sum_{l=1}^2l\ajl\sum_{p=0}^2\xi_p\eta_i(x_p)x_p^{l-1}
+\end{equation}
+
+Since the jump values in \cref{eq:bilinearB} introduce values from the upstream mesh, 
+those must be included in the source matrix $\asVector{S^{n+1}}$. 
+For the mesh of interest, the $\asMatrix{B}$ matrix depends upon the value of $\mu_m$.
+\begin{equation}
+    \label{eq:bCoeffs}
+    b_{i,j} = \begin{cases}
+        \eta_i(x_0)\delta_{j,0},\text{ for }\mu_m > 0 \\
+        \eta_i(x_2)\delta_{j,2},\text{ for }\mu_m < 0 \\
+    \end{cases}
+\end{equation}
+
+Using the coefficients defined in \cref{eq:aCoeffs,eq:bCoeffs,eq:cCoeffs,eq:dCoeffs} and 
+the test functions defined in \cref{eq:testfuncs}, all the material is in place in order
+to solve the linear system\footnote{iteratively, as discussed in \cref{sec:iterations}}
+defined in \cref{eq:matrixFEM}.
+\subsection{Basic Iteration Scheme} \label{sec:iterations}
+
 \subsection{Using \texttt{fesnt.py}} \label{sec:usage}
 
 \section{Results} \label{sec:results}
