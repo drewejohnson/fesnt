@@ -7,6 +7,8 @@ TODO:W: Default number of divisions
 TODO:W: Allow a single entry to be entered as divisions and applied to all zones
 TODO:W: Criticality calculation
 """
+from os import mkdir
+from os.path import splitext, split, exists, isdir, join
 
 from numpy import array, empty, sum, diff, linspace, empty_like, sin
 from yaml import safe_load
@@ -266,7 +268,18 @@ class Manager(object):
         ax.set_title("T = {:7.5f}".format(self.tgrid[timeLevel]))
         return ax
 
-    def angularGif(self, prefix="", pointsPerMesh=5):
+    def angularGif(self, prefix='', pointsPerMesh=5):
+        if not prefix:
+            baseDir, basename = split(self.filePath)
+            caseTitle = splitext(basename)[0]
+            targetDir = join(baseDir, caseTitle)
+            if exists(targetDir) and not isdir(targetDir):
+                raise IOError("Output directory {} exists and is not directory"
+                              .format(targetDir))
+            if not exists(targetDir):
+                mkdir(targetDir)
+            print("INFO: Saving images to {}".format(targetDir))
+            prefix = join(targetDir, caseTitle)
         return giffify(self, prefix, pointsPerMesh)
 
     def getFullMatrix(self, pointsPerMesh=5):
@@ -355,7 +368,7 @@ def giffify(manager, prefix='', pointsPerMesh=5):
         $ convert -delay 15 -loop 0 *.png output.fig
 
     """
-    from matplotlib.pyplot import subplots
+    from matplotlib.pyplot import subplots, suptitle
     fmt = prefix + "step{}"
     fig, ax = subplots(1,1)
     nSteps = manager.tgrid.size
@@ -373,8 +386,10 @@ def giffify(manager, prefix='', pointsPerMesh=5):
         for muIndx, mu in enumerate(angles):
             ax.plot(xGrid, fullMatrix[step, muIndx], 
                     label=r'$\mu={:7.5f}$'.format(mu))
-        ax.legend()
-        ax.set_title('t={:7.5f}'.format(manager.tgrid[step]))
+        ax.legend(bbox_to_anchor=(0, 1.02, 1, 0.102), loc=3, ncol=2, 
+                                  mode='expand', 
+                                  borderaxespad=0.)
+        suptitle('t={:7.5f}'.format(manager.tgrid[step]))
         ax.set_xlabel('X [cm]')
         ax.set_ylabel(r'$\psi(x,\mu,t)$')
         ax.set_ylim(lower, upper)
