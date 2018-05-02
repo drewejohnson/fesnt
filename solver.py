@@ -24,13 +24,13 @@ class Solver(object):
         if self.tgrid is None or not any(self.tgrid):
             return
         print("INFO: Starting solution routine")
-        nSteps = self.tgrid.size - 1
+        nSteps = self.tgrid.size
         updateAt = nSteps // 10
         for timeLevel  in range(1, nSteps):
             tn = self.tgrid[timeLevel]
             if timeLevel % updateAt == 0:
                 print("INFO: Solving for time level {} of {}"
-                      .format(timeLevel, nSteps))
+                      .format(timeLevel, nSteps - 1))
             dt = self.tgrid[timeLevel] - self.tgrid[timeLevel - 1]
             fluxIndex = self.__fluxIteration(timeLevel, tn, 1 / dt)
             for mesh in self.meshes:

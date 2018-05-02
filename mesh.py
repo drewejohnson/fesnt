@@ -5,7 +5,7 @@ TODO: *******TEST FUNCTIONS SATISFY HOMOG BOUNDARY CONDITIONS *****************
 """
 from itertools import product
 from numpy import (empty, linspace, float64, array, fabs, zeros, multiply,
-                   power, empty_like, arange, zeros_like, isnan)
+                   power, empty_like, arange, zeros_like, isnan, where)
 from numpy.linalg import solve
 from poly import buildLagrangeCoeffs
 
@@ -33,7 +33,7 @@ class Mesh(object):
         sourceXS = SOURCE_FACTOR * (
             xs['scatt0'] + xs['chit'] * xs['nubar'] * xs['fiss']) * self.dx * 0.5
         self.__sigT = xs['tot'][0]
-        self.__invv = xs['invv'][0]
+        self.__invv = xs['invv'][0] * 1E4  # cool your jets neutrons
         self.sourceXS = sourceXS[0]
         self.coeffs = None
         self.upwindMeshes = {}
@@ -88,16 +88,15 @@ class Mesh(object):
    
     def getFluxDifference(self, innerIndex):
         """Return the difference between fluxes between two iterations."""
-        #TODO: Make this a relative difference - watch out for 1/0 errors 
         if not innerIndex:
             return
-        if isnan(self.__inner[innerIndex]).any():
+        current = self.__inner[innerIndex]
+        previous = self.__inner[innerIndex-1]
+        if isnan(current).any():
             return -1
-        diff = fabs((self.__inner[innerIndex + 1] 
-                    - self.__inner[innerIndex])
-        nonZero = where(diff > 0)
-        if nonZero.size:
-            diff[nonZero] /= self.__inner[innerIndex][nonZero]
+        diff = fabs(previous - current)
+        nonZero = where(current > 0)
+        diff[nonZero] /= current[nonZero]
         return diff.max()
     def buildASubMatrix(self, nUnknowns):
         """Build the matrix of ``a_{i,j}`` coefficients

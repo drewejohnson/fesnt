@@ -2,7 +2,6 @@
 Main driver script for FeSnT
 
 Copyright (2018) Andrew Johnson, GTRC
-TODO:   Plotting
 TODO:W: Status logging
 TODO:W: Default number of divisions
 TODO:W: Allow a single entry to be entered as divisions and applied to all zones
@@ -17,6 +16,7 @@ from quad import getQuadrature
 from poly import polyval
 from mesh import Mesh
 from solver import Solver
+from analytic import gamma1
 
 QUAD = 'quadrature'
 DEFAULTS = {
@@ -56,7 +56,7 @@ class PulsedSource(object):
 class DemoSource(object):
 
     def __call__(self, t, mu):
-        return mu * (sin(t) ** 2)
+        return gamma1(mu, t)
 
 
 BOUNDARY_SOURCES.update({

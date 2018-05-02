@@ -6,11 +6,11 @@ geometry:
 boundaries:
     x: [muSinT, vac]
 time:
-    bounds: [10]
-    divisions: [1000]
+    bounds: [0.01]
+    divisions: [100]
 quadrature: 2
 calc: fixed
 initial:
     flux: 0
-innerLim: 10000
+innerLim: 100
 innerEps: 1E-6

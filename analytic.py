@@ -22,8 +22,9 @@ def analytic(mu, tvec, xvec, sigmat, invvel, gammaFunc):
         numpy.exp(-meshX[unitStep1] * sigmat / mu))
     return out
 
+FREQ = 1E3
 def gamma1(mu, t):
-    return mu * (numpy.sin(t) ** 2)
+    return mu * (numpy.sin(t * FREQ) ** 2)
 
 # 
 # Material properties from pure absorber
