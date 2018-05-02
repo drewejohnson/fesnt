@@ -26,7 +26,7 @@
 \newcommand{\fisTrms}{\chi\nu\sigma_f}
 \newcommand{\tfor}{\text{ for }}
 \newcommand{\tfes}{finite-element space }
-\newcommand{\forEtaInV}{,\,\forall\eta\in\mfesv}
+{\newcommand{\forEtaInV}{,\,\forall\eta\in\mfesv}
 \newcommand{\sumTaus}{\sum_{\tauinT}}
 \newcommand{\tfem}{finite-element method }
 \newcommand{\tauinT}{\tau\in\tauh}
@@ -44,6 +44,9 @@
 \newcommand{\fephi}{\tilde{\phi}}
 \newcommand{\mabs}[1]{\left|#1\right|}
 \newcommand{\jump}[1]{\left[#1\right]}
+\newcommand{\asMatrix}[1]{\mathbf{#1}}
+\newcommand{\asVector}[1]{\left\lbrace#1\right\rbrace}
+\newcommand{\bilinear}{\tauInt{\fepsim^{n+1}}{\eta}}
 \title{$FeS_NT$ - A Finite Element Neutron Transport Solver}
 \author{Andrew Johnson}
 \usepackage[left=1in,right=1in,top=0.75in,bottom=1in]{geometry}
@@ -306,14 +309,65 @@ and the final \tfem can be written as follows: For all angles $\mu_m\in\vec{\mu}
             \right] \\
         = \sumTaus\left[
             \frac{1}{v^\tau\Delta t_n}\tauInt{\fepsim^n}{\eta}
-            +\sigma_S\tauInt{\fephi}{\eta}
+            +\sigma_S\tauInt{\fephi^{n+1}}{\eta}
             \right]
         \forEtaInV
     \end{split}
 \end{equation}
 where $\fephi\equiv\sum_mw_m\fepsim$
-\section{Implementation} \label{sec:implement}
 
+\section{Implementation} \label{sec:implement}
+As discussed in \cref{sec:results}, the scheme presented in \cref{eq:finalFEM} is applied to
+various one-dimensional problems. 
+A traditional method for solving the discrete-ordinates form of the transport equation 
+is to march through meshes along specific angles $\mu$ starting at an incident 
+boundary condition \cite{lewis1984computational}.
+For this approach, each mesh is solved individually using information taken from
+either the upwind mesh, in the form of jump terms, or the relevant boundary conditions.
+
+\subsection{Matrix Formulation}
+
+\Cref{eq:finalFEM} is recast into a linear system that will be solved iteratively, as the
+scalar flux $\fephi$ must be evaluated at the same time level as the angular flux $\fepsim$.
+
+\begin{equation}
+    \label{eq:matrixFEM}
+    \left[
+        \mu_m\asMatrix{A}+\mabs{\mu_m}\asMatrix{B} + \asMatrix{C}
+        +\frac{1}{\Delta t_n}\asMatrix{D}
+    \right]
+    \asVector{\fepsim^{n+1}}
+    =\frac{1}{\Delta t_n}\asMatrix{D}\asVector{\fepsim^n}+\asVector{S^{n+1}}
+\end{equation}
+
+The where matrices $\asMatrix{A},\asMatrix{B},\asMatrix{C}$ and $\asMatrix{D}$ contain 
+coefficients from the following bilinear operators:
+\begin{subequations}
+    \begin{equation}
+        \label{eq:bilinearA}
+        a\bilinear = \tauInt{\ddx{\fepsim^{n+1}}}{\eta}
+        \Rightarrow \asVector{a_{ij}}
+    \end{equation}
+    \begin{equation}
+        \label{eq:bilinearB}
+        b\bilinear=
+        \left.\left(\jump{\fepsim^{n+1}}\inTau{\eta}\right)\right|_{\tau^{upw}}
+        \Rightarrow \asVector{b_{ij}}
+    \end{equation}
+    \begin{equation}
+        \label{eq:bilinearC}
+        c\bilinear=\sigma_t\tauInt{\fepsim^{n+1}}{\eta}
+        \Rightarrow \asVector{c_{ij}}
+    \end{equation}
+    \begin{equation}
+        \label{eq:bilinearD}
+        d\bilinear=\frac{1}{v\Delta t_n}\tauInt{\fepsim^{n+1}}{\eta}
+        \Rightarrow \asVector{c_{ij}}
+    \end{equation}
+\end{subequations}
+In each of the following examples, the variable $\xi_j$ refers to the vector of coefficients
+from Simpson's integration: $\asVector{\xi}\equiv\left[0.5, 2.0, 0.5\right]$.
+\subsection{Basic Iteration Scheme}
 \subsection{Using \texttt{fesnt.py}} \label{sec:usage}
 
 \section{Results} \label{sec:results}
@@ -332,10 +386,10 @@ where $\fephi\equiv\sum_mw_m\fepsim$
 \section{Appendix}
 
 \subsection{Quadrature Sets} \label{sec:qsets}
-The following tables contain the quadrature sets that were used in this work.
+The following tables contain the quadrature sets that were used in this work and can be found
+in \cite{lewis1984computational}.
 For each set, only half of the values are presented, as symmetry rules from \cref{eq:quadRules}
 can be used to construct the full set.
-%TODO: Cite L&M
 %TODO:W: Two columns
 \input{../s2.tex}
 \input{../s4.tex}
