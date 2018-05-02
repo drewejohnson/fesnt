@@ -7,7 +7,7 @@ from numpy import empty
 class Solver(object):
 
     __slots__ = ('meshes', 'quad', 'starts', 'tgrid', 'nGroups', 'innerLim',
-                 'innerEps', 'outerEps', 'outerLim', 'angles', '__isEig')
+                 'innerEps', 'outerEps', 'outerLim', 'angles')
 
     def __init__(self, manager):
         self.meshes = manager.meshes
@@ -18,19 +18,19 @@ class Solver(object):
         self.outerLim = manager.settings['outerLim']
         self.innerEps = manager.settings['innerEps']
         self.outerEps = manager.settings['outerEps']
-        self.__isEig = manager.calcType == 'eig'
 
     def solve(self):
         """Here we go."""
-        if self.__isEig:
-            self.__outerIteration(0, 0, 0)
         if self.tgrid is None or not any(self.tgrid):
             return
-        nSteps = self.tgrid.size
+        print("INFO: Starting solution routine")
+        nSteps = self.tgrid.size - 1
+        updateAt = nSteps // 10
         for timeLevel  in range(1, nSteps):
-            tn= self.tgrid[timeLevel]
-            print("INFO: Solving for time level {} of {}"
-                  .format(timeLevel, nSteps))
+            tn = self.tgrid[timeLevel]
+            if timeLevel % updateAt == 0:
+                print("INFO: Solving for time level {} of {}"
+                      .format(timeLevel, nSteps))
             dt = self.tgrid[timeLevel] - self.tgrid[timeLevel - 1]
             fluxIndex = self.__fluxIteration(timeLevel, tn, 1 / dt)
             for mesh in self.meshes:

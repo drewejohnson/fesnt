@@ -56,7 +56,7 @@ class PulsedSource(object):
 class DemoSource(object):
 
     def __call__(self, t, mu):
-        return mu * sin(t)
+        return mu * (sin(t) ** 2)
 
 
 BOUNDARY_SOURCES.update({
@@ -266,6 +266,22 @@ class Manager(object):
         ax.set_title("T = {:7.5f}".format(self.tgrid[timeLevel]))
         return ax
 
+    def angularGif(self, prefix="", pointsPerMesh=5):
+        return giffify(self, prefix, pointsPerMesh)
+
+    def getFullMatrix(self, pointsPerMesh=5):
+        """Return the full space-time dependent flux [time, mu, pos]."""
+        numXPoints = len(self.meshes) * pointsPerMesh
+        output = empty((self.tgrid.size, self.angles.size, numXPoints))
+        xvec = None
+        for step in range(self.tgrid.size):
+            outs = self.getAngular(step, pointsPerMesh)
+            output[step] = outs[1]
+            if xvec is None:
+                xvec = outs[0]
+        return output, xvec
+
+
 def scrapeInput(filePath):
     """Scrape the input file."""
     from scrapexs import scrape
@@ -328,6 +344,42 @@ def buildGridVector(bounds, divisions, start=0):
         grid[prevIndx:prevIndx + len(points)] = points
         prevIndx += div + (0 if ii else 1)
     return grid
+
+
+def giffify(manager, prefix='', pointsPerMesh=5):
+    """
+    Save a series of figures of the angular fluxes.
+
+    Can be used to create a gif with::
+
+        $ convert -delay 15 -loop 0 *.png output.fig
+
+    """
+    from matplotlib.pyplot import subplots
+    fmt = prefix + "step{}"
+    fig, ax = subplots(1,1)
+    nSteps = manager.tgrid.size
+    updateAt = nSteps // 10
+    fullMatrix, xGrid = manager.getFullMatrix(pointsPerMesh) 
+    angles = manager.angles
+    lower, upper = (fullMatrix.min(), fullMatrix.max())
+    diff = upper - lower
+    lower -= diff / 10
+    upper += diff / 10
+    lenZfill = len(str(nSteps))
+    for step in range(1, nSteps):
+        if step % updateAt == 0:
+            print("{} of {}".format(step, nSteps - 1))
+        for muIndx, mu in enumerate(angles):
+            ax.plot(xGrid, fullMatrix[step, muIndx], 
+                    label=r'$\mu={:7.5f}$'.format(mu))
+        ax.legend()
+        ax.set_title('t={:7.5f}'.format(manager.tgrid[step]))
+        ax.set_xlabel('X [cm]')
+        ax.set_ylabel(r'$\psi(x,\mu,t)$')
+        ax.set_ylim(lower, upper)
+        fig.savefig(fmt.format(str(step).zfill(lenZfill)), bbox_inches='tight')
+        ax.clear()
 
 
 if __name__ == "__main__":
