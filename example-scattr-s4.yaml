@@ -1,20 +1,16 @@
 xsfile: ./fp_1D_1G_res.m
 geometry:
-    universes: [11]
-    divisions: [10]
-    bounds: [10]
-left-source: &left-source
-    t0: 0
-    t1: 1
-    mag: 1E14
+    universes: [12]
+    divisions: [100]
+    bounds: [1]
 boundaries:
-    x: [{pulse: *left-source}, vac]
+    x: [muSinT, vac]
 time:
-    bounds: [2]
-    divisions: [1000]
+    bounds: [0.01]
+    divisions: [100]
 quadrature: 4
 calc: fixed
 initial:
     flux: 0
-innerLim: 10000
+innerLim: 100
 innerEps: 1E-6

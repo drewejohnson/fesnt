@@ -1,16 +1,16 @@
 xsfile: ./fp_1D_1G_res.m
 geometry:
-    universes: [12]
-    divisions: [100]
-    bounds: [1]
+    universes: [10, 11, 12]
+    divisions: [75, 10 , 15]
+    bounds: [0.5, 0.6, 0.665]
 boundaries:
-    x: [muSinT, vac]
+    x: [muSinT, ref]
 time:
     bounds: [0.01]
     divisions: [100]
-quadrature: 2
+quadrature: 4
 calc: fixed
 initial:
     flux: 0
-innerLim: 100
+innerLim: 1000
 innerEps: 1E-6
